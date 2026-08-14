@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "33904026107",
+    "project_id": "com-aus-gemini01-d91c9",
+    "storage_bucket": "com-aus-gemini01-d91c9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:33904026107:android:80ecbda32c0539eade6b5e",
+        "android_client_info": {
+          "package_name": "com.aus.gemini01"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJuyd4eiS6JYA9HqNBftWk3HNC03RON_E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

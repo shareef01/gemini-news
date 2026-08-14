@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Gemini News</string>
+    <string name="shortcut_bookmarks_short">Bookmarks</string>
+    <string name="shortcut_bookmarks_long">Open Saved Articles</string>
+    <string name="shortcut_tech_short">Technology</string>
+    <string name="shortcut_tech_long">Read Technology News</string>
+</resources>

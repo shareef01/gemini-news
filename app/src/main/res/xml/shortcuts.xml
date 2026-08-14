@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="bookmarks"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_menu_save"
+        android:shortcutShortLabel="@string/shortcut_bookmarks_short"
+        android:shortcutLongLabel="@string/shortcut_bookmarks_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.aus.gemini01"
+            android:targetClass="com.aus.gemini01.MainActivity"
+            android:data="newsapp://category/bookmarks" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="technology"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_menu_compass"
+        android:shortcutShortLabel="@string/shortcut_tech_short"
+        android:shortcutLongLabel="@string/shortcut_tech_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.aus.gemini01"
+            android:targetClass="com.aus.gemini01.MainActivity"
+            android:data="newsapp://category/technology" />
+    </shortcut>
+</shortcuts>
