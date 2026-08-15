@@ -19,10 +19,10 @@ data class Article(
     val urlToImage: String? = null,
     val publishedAt: String,
     val content: String? = null
-)
+) : java.io.Serializable
 
 @Serializable
 data class Source(
     val id: String? = null,
     val name: String
-)
+) : java.io.Serializable

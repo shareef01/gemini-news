@@ -14,6 +14,7 @@ import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.layout.*
 import androidx.compose.material3.adaptive.navigation.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,7 +47,7 @@ fun AdaptiveNewsScreen(
     val chatMessages by viewModel.chatMessages.collectAsState()
     val isChatting by viewModel.isChatting.collectAsState()
 
-    var selectedArticleForWeb by remember { mutableStateOf<Article?>(null) }
+    var selectedArticleForWeb by rememberSaveable { mutableStateOf<Article?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var showChat by remember { mutableStateOf(false) }
 
