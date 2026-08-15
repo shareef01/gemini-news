@@ -15,7 +15,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal enum class BlockKind { H1, H2, BULLET, BODY }
+internal enum class BlockKind { H1, H2, H3, BULLET, BODY }
 
 internal data class Segment(val text: String, val bold: Boolean)
 
@@ -69,6 +69,16 @@ fun MarkdownText(
                     fontWeight = FontWeight.Bold
                 )
 
+                BlockKind.H3 -> Text(
+                    text = annotated,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = (14 * fontScale).sp,
+                        lineHeight = (19 * fontScale).sp
+                    ),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 BlockKind.BULLET -> Text(
                     text = buildAnnotatedString {
                         append("•  ")
@@ -109,6 +119,10 @@ internal fun parseMarkdown(text: String): List<Block> {
         val line = rawLine.trimEnd()
         when {
             line.isBlank() -> flushParagraph()
+            line.startsWith("### ") -> {
+                flushParagraph()
+                blocks.add(Block(BlockKind.H3, parseInline(line.removePrefix("### ").trim())))
+            }
             line.startsWith("## ") -> {
                 flushParagraph()
                 blocks.add(Block(BlockKind.H2, parseInline(line.removePrefix("## ").trim())))

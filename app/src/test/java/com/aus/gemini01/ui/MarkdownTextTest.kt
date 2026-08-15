@@ -19,6 +19,14 @@ class MarkdownTextTest {
     }
 
     @Test
+    fun `parses h3 headings and strips the hashes`() {
+        val blocks = parseMarkdown("### 1. Key Takeaways")
+
+        assertEquals(BlockKind.H3, blocks[0].kind)
+        assertEquals("1. Key Takeaways", blocks[0].segments[0].text)
+    }
+
+    @Test
     fun `parses all supported bullet markers`() {
         val blocks = parseMarkdown("- one\n* two\n\u2022 three")
 
