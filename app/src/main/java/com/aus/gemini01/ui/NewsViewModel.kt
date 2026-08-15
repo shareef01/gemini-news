@@ -535,8 +535,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     Content: ${article.content ?: "N/A"}
                 """.trimIndent()
 
-                val response = generativeModel.generateContent(prompt)
+                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
                 _readerViewContent.value = response.text
+            } catch (e: TimeoutCancellationException) {
+                _readerViewContent.value = "Reader View generation timed out. Please try again."
             } catch (e: Exception) {
                 _readerViewContent.value = "Failed to generate Reader View: ${e.localizedMessage}"
             } finally {
