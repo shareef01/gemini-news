@@ -92,34 +92,11 @@ fun AdaptiveNewsScreen(
                         topBar = {
                             TopAppBar(
                                 title = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Surface(
-                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                                            color = MaterialTheme.colorScheme.primaryContainer
-                                        ) {
-                                            Icon(
-                                                Icons.Default.AutoAwesome,
-                                                contentDescription = null,
-                                                modifier = Modifier
-                                                    .padding(6.dp)
-                                                    .size(18.dp),
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column {
-                                            Text(
-                                                "Gemini News",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                "AI-powered news",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = "Gemini News",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 },
                                 actions = {
                                     IconButton(onClick = { showChat = true }) {
