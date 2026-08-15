@@ -458,28 +458,64 @@ fun ArticleCard(
     ) {
         Box {
             Column {
-                article.urlToImage?.let {
-                    Box {
+                // Image area: branded placeholder shows while loading, when the
+                // image fails, or when the article has no image at all.
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.secondaryContainer
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Public,
+                                contentDescription = null,
+                                modifier = Modifier.size(36.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = article.source.name,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    article.urlToImage?.let { imageUrl ->
                         AsyncImage(
-                            model = it,
+                            // Many feeds serve http:// images, which Android blocks;
+                            // most hosts also serve the same image over https.
+                            model = imageUrl.replaceFirst("http://", "https://"),
                             contentDescription = null,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(220.dp),
                             contentScale = ContentScale.Crop
                         )
-                        // Scrim behind the floating actions for contrast
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(72.dp)
-                                .background(
-                                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                        colors = listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent)
-                                    )
-                                )
-                        )
                     }
+
+                    // Scrim behind the floating actions for contrast
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(72.dp)
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    colors = listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent)
+                                )
+                            )
+                    )
                 }
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
