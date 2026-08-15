@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -57,6 +58,13 @@ fun NewsListContent(
     val countryCode by viewModel.countryCode.collectAsState()
 
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+
+    // Compose auto-focuses the first focusable element (the search field) on
+    // startup, which pops the keyboard. Clear it until the user taps the field.
+    LaunchedEffect(Unit) {
+        focusManager.clearFocus()
+    }
 
     val categories = listOf(
         "smart", "for_you", "general", "business", "entertainment", "health", "science", "sports", "technology", "bookmarks", "history"
