@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
+// Regions the configured NewsAPI plan is known to serve.
+private val supportedCountries = setOf("us")
+
 class SettingsRepository(private val context: Context) {
     private val countryKey = stringPreferencesKey("country_code")
     private val lastNotifiedUrlKey = stringPreferencesKey("last_notified_url")
@@ -22,6 +25,11 @@ class SettingsRepository(private val context: Context) {
     val countryCode: Flow<String> = context.dataStore.data
         .map { preferences ->
             preferences[countryKey] ?: "us"
+        }
+        .map { code ->
+            // Heal values stored by older app versions that offered countries the
+            // current NewsAPI plan doesn't serve (e.g. a persisted "de").
+            if (code in supportedCountries) code else "us"
         }
 
     val preferredLanguage: Flow<String> = context.dataStore.data

@@ -2,6 +2,7 @@ package com.aus.gemini01.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -18,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aus.gemini01.data.Article
 import kotlinx.coroutines.launch
@@ -81,7 +81,20 @@ fun AdaptiveNewsScreen(
                     Scaffold(
                         topBar = {
                             TopAppBar(
-                                title = { Text("Gemini News") },
+                                title = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            "Gemini News",
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                },
                                 actions = {
                                     IconButton(onClick = { showChat = true }) {
                                         Icon(Icons.Default.QuestionAnswer, contentDescription = "AI Chat", tint = MaterialTheme.colorScheme.primary)
@@ -160,17 +173,32 @@ fun AdaptiveNewsScreen(
                                 verticalArrangement = Arrangement.Center,
                                 modifier = Modifier.padding(32.dp)
                             ) {
-                                Surface(
-                                    modifier = Modifier.size(120.dp),
-                                    shape = androidx.compose.foundation.shape.CircleShape,
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                Box(
+                                    modifier = Modifier
+                                        .size(160.dp)
+                                        .background(
+                                            brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                                                colors = listOf(
+                                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0f)
+                                                )
+                                            ),
+                                            shape = androidx.compose.foundation.shape.CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        Icons.Default.MenuBook,
-                                        contentDescription = null,
-                                        modifier = Modifier.padding(24.dp).fillMaxSize(),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
+                                    Surface(
+                                        modifier = Modifier.size(96.dp),
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.MenuBook,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(26.dp).fillMaxSize(),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(24.dp))
                                 Text(
@@ -186,6 +214,18 @@ fun AdaptiveNewsScreen(
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Surface(
+                                    shape = MaterialTheme.shapes.large,
+                                    color = MaterialTheme.colorScheme.tertiaryContainer
+                                ) {
+                                    Text(
+                                        "Tip: tap Summarize ✨ on any card",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                }
                             }
                         }
                     }
@@ -217,10 +257,9 @@ fun AIDialog(
         text = {
             val scrollState = rememberScrollState()
             SelectionContainer {
-                Text(
+                MarkdownText(
                     text = content,
-                    modifier = Modifier.verticalScroll(scrollState),
-                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 22.sp)
+                    modifier = Modifier.verticalScroll(scrollState)
                 )
             }
         },
@@ -248,25 +287,32 @@ fun GlobalOverlays(viewModel: NewsViewModel) {
     val trendingTopics by viewModel.trendingTopics.collectAsState()
 
     AnimatedVisibility(visible = isAnalysingInterests, enter = fadeIn(), exit = fadeOut()) {
-        AIProgressOverlay(message = "Gemini is analyzing your interests...")
+        AIProgressOverlay(message = "Gemini is analyzing your interests...", onCancel = { viewModel.cancelAnalysis() })
     }
     AnimatedVisibility(visible = isSummarizing, enter = fadeIn(), exit = fadeOut()) {
-        AIProgressOverlay(message = "Gemini is summarizing...")
+        AIProgressOverlay(message = "Gemini is summarizing...", onCancel = { viewModel.cancelAnalysis() })
     }
     AnimatedVisibility(visible = isListening, enter = fadeIn(), exit = fadeOut()) {
         AIProgressOverlay(message = "Listening...")
     }
     AnimatedVisibility(visible = isAnalysingStats, enter = fadeIn(), exit = fadeOut()) {
-        AIProgressOverlay(message = "Gemini is analyzing your week...")
+        AIProgressOverlay(message = "Gemini is analyzing your week...", onCancel = { viewModel.cancelAnalysis() })
     }
     AnimatedVisibility(visible = isAnalysingTrends, enter = fadeIn(), exit = fadeOut()) {
-        AIProgressOverlay(message = "Gemini is identifying trends...")
+        AIProgressOverlay(message = "Gemini is identifying trends...", onCancel = { viewModel.cancelAnalysis() })
     }
     AnimatedVisibility(visible = isAnalysingSmartThemes, enter = fadeIn(), exit = fadeOut()) {
-        AIProgressOverlay(message = "Gemini is building your custom news themes...")
+        AIProgressOverlay(message = "Gemini is building your custom news themes...", onCancel = { viewModel.cancelAnalysis() })
     }
     AnimatedVisibility(visible = isAnalysingLocations, enter = fadeIn(), exit = fadeOut()) {
-        AIProgressOverlay(message = "Gemini is mapping the news...")
+        AIProgressOverlay(message = "Gemini is mapping the news...", onCancel = { viewModel.cancelAnalysis() })
+    }
+
+    // Let the user bail out of a stuck AI request with the system back gesture.
+    if (isAnalysingInterests || isSummarizing || isAnalysingStats || isAnalysingTrends ||
+        isAnalysingSmartThemes || isAnalysingLocations
+    ) {
+        BackHandler { viewModel.cancelAnalysis() }
     }
 
     summary?.let {

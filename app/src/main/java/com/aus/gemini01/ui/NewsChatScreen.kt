@@ -22,6 +22,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,8 +115,7 @@ fun NewsChatScreen(
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage) {
-    val alignment = if (message.isUser) Alignment.End else Alignment.Start
+fun ChatBubble(message: ChatMessage) {    val alignment = if (message.isUser) Alignment.End else Alignment.Start
     val containerColor = if (message.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (message.isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -166,6 +168,12 @@ fun ChatBubble(message: ChatMessage) {
                 modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
+            Text(
+                text = formatMessageTime(message.timestamp),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 1.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+            )
         }
 
         if (message.isUser) {
@@ -183,5 +191,15 @@ fun ChatBubble(message: ChatMessage) {
                 )
             }
         }
+    }
+}
+
+private fun formatMessageTime(timestamp: Long): String {
+    return try {
+        Instant.ofEpochMilli(timestamp)
+            .atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("HH:mm"))
+    } catch (e: Exception) {
+        ""
     }
 }

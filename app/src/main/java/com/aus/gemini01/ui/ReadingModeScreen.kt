@@ -16,9 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,16 +86,12 @@ fun ReadingModeScreen(
                     .verticalScroll(scrollState)
                     .padding(horizontal = 24.dp, vertical = 32.dp)
             ) {
-                Text(
+                MarkdownText(
                     text = content,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = (18 * fontSizeMultiplier).sp,
-                        lineHeight = (30 * fontSizeMultiplier).sp,
-                        fontFamily = FontFamily.Serif
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface
+                    fontScale = fontSizeMultiplier,
+                    modifier = Modifier.fillMaxWidth()
                 )
-                
+
                 Spacer(modifier = Modifier.height(80.dp))
                 
                 Surface(

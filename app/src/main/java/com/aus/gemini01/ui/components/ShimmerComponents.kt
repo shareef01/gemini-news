@@ -50,52 +50,90 @@ fun ArticleCardShimmer() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = MaterialTheme.shapes.extraLarge
     ) {
         Column {
+            // Image
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .height(220.dp)
                     .shimmerEffect()
             )
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                // Title lines
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.7f)
+                        .fillMaxWidth(0.9f)
                         .height(20.dp)
                         .shimmerEffect()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.4f)
-                        .height(14.dp)
+                        .fillMaxWidth(0.6f)
+                        .height(20.dp)
                         .shimmerEffect()
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp)
-                        .shimmerEffect()
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
+                // Source chip + time
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .width(80.dp)
-                            .height(36.dp)
+                            .width(72.dp)
+                            .height(18.dp)
                             .shimmerEffect()
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Box(
                         modifier = Modifier
-                            .width(100.dp)
-                            .height(36.dp)
+                            .width(48.dp)
+                            .height(14.dp)
+                            .shimmerEffect()
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                // Description
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(14.dp)
+                        .shimmerEffect()
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.8f)
+                        .height(14.dp)
+                        .shimmerEffect()
+                )
+                Spacer(modifier = Modifier.height(18.dp))
+                // Action row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Row {
+                        Box(
+                            modifier = Modifier
+                                .width(52.dp)
+                                .height(36.dp)
+                                .shimmerEffect()
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(64.dp)
+                                .height(36.dp)
+                                .shimmerEffect()
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .width(110.dp)
+                            .height(40.dp)
                             .shimmerEffect()
                     )
                 }

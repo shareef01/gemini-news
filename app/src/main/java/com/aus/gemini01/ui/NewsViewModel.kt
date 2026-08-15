@@ -2,6 +2,7 @@ package com.aus.gemini01.ui
 
 import android.app.Application
 import android.content.Intent
+import android.content.pm.ShortcutManager
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -18,9 +19,11 @@ import com.google.firebase.ai.ai
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 data class NewsLocation(
     val name: String,
@@ -148,6 +151,15 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     // slower responses from overwriting newer results.
     private var fetchJob: Job? = null
     private var searchJob: Job? = null
+
+    // The long-running AI calls behind the progress overlays.
+    private var analysisJob: Job? = null
+
+    /** Cancels whatever AI operation is currently blocking the UI with an overlay. */
+    fun cancelAnalysis() {
+        analysisJob?.cancel()
+        fetchJob?.cancel() // "For You" analysis runs inside fetchJob
+    }
 
     val bookmarks: StateFlow<List<Article>> = repository.getAllBookmarks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -299,7 +311,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     Example: Space Exploration, AI, Electric Vehicles
                 """.trimIndent()
 
-                val response = generativeModel.generateContent(prompt)
+                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
                 forYouKeywords = response.text?.trim() ?: "general"
                 
                 currentPage = 1
@@ -309,6 +321,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = NewsUiState.Success(articles)
                 if (articles.isEmpty()) isLastPage = true
                 
+            } catch (e: TimeoutCancellationException) {
+                _uiState.value = NewsUiState.Error("AI analysis timed out. Please try again.")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -462,7 +476,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         _isSummarizing.value = true
         _summaryState.value = null
         
-        viewModelScope.launch(Dispatchers.IO) {
+        analysisJob?.cancel()
+        analysisJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 val prompt = """
                     Analyze this news article and provide a structured summary with the following sections:
@@ -477,8 +492,12 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     Content: ${article.content ?: "N/A"}
                 """.trimIndent()
                 
-                val response = generativeModel.generateContent(prompt)
+                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
                 _summaryState.value = response.text
+            } catch (e: TimeoutCancellationException) {
+                _summaryState.value = "The AI request timed out. Please try again."
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _summaryState.value = "Failed to summarize: ${e.localizedMessage}"
             } finally {
@@ -535,7 +554,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         _isAnalysingStats.value = true
         _readingStats.value = null
 
-        viewModelScope.launch {
+        analysisJob?.cancel()
+        analysisJob = viewModelScope.launch {
             try {
                 val recentArticles = history.value.take(20)
                 if (recentArticles.isEmpty()) {
@@ -556,8 +576,12 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     Output the entire response in ${preferredLanguage.value}.
                 """.trimIndent()
 
-                val response = generativeModel.generateContent(prompt)
+                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
                 _readingStats.value = response.text
+            } catch (e: TimeoutCancellationException) {
+                _readingStats.value = "The AI request timed out. Please try again."
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _readingStats.value = "Failed to analyze stats: ${e.localizedMessage}"
             } finally {
@@ -577,7 +601,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         _isAnalysingTrends.value = true
         _trendingTopics.value = null
 
-        viewModelScope.launch {
+        analysisJob?.cancel()
+        analysisJob = viewModelScope.launch {
             try {
                 val titles = currentArticles.take(15).joinToString("\n") { "- ${it.title}" }
                 val prompt = """
@@ -594,8 +619,12 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     $titles
                 """.trimIndent()
 
-                val response = generativeModel.generateContent(prompt)
+                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
                 _trendingTopics.value = response.text
+            } catch (e: TimeoutCancellationException) {
+                _trendingTopics.value = "The AI request timed out. Please try again."
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _trendingTopics.value = "Failed to analyze trends: ${e.localizedMessage}"
             } finally {
@@ -616,7 +645,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         _smartThemes.value = emptyMap()
         _selectedSmartTheme.value = null
 
-        viewModelScope.launch {
+        analysisJob?.cancel()
+        analysisJob = viewModelScope.launch {
             try {
                 val titlesWithIndex = currentArticles.take(20).mapIndexed { index, article -> "$index: ${article.title}" }.joinToString("\n")
                 val prompt = """
@@ -631,7 +661,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     $titlesWithIndex
                 """.trimIndent()
 
-                val response = generativeModel.generateContent(prompt)
+                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
                 val responseText = response.text ?: ""
                 
                 val newThemes = mutableMapOf<String, List<Article>>()
@@ -655,6 +685,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = NewsUiState.Error("Gemini couldn't identify specific themes for today's news.")
                 }
                 
+            } catch (e: TimeoutCancellationException) {
+                _uiState.value = NewsUiState.Error("AI request timed out. Please try again.")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = NewsUiState.Error("Smart Categorization failed: ${e.localizedMessage}")
             } finally {
@@ -675,7 +709,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         _isAnalysingLocations.value = true
         _newsLocations.value = emptyList()
 
-        viewModelScope.launch {
+        analysisJob?.cancel()
+        analysisJob = viewModelScope.launch {
             try {
                 val titlesWithUrl = currentArticles.take(15).joinToString("\n") { "${it.title} | ${it.url}" }
                 val prompt = """
@@ -689,7 +724,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     $titlesWithUrl
                 """.trimIndent()
 
-                val response = generativeModel.generateContent(prompt)
+                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
                 val responseText = response.text ?: ""
                 
                 val locations = responseText.lines().mapNotNull { line ->
@@ -704,6 +739,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 
                 _newsLocations.value = locations
+            } catch (e: TimeoutCancellationException) {
+                _errorEvents.emit("Mapping timed out. Please try again.")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _errorEvents.emit("Mapping failed: ${e.localizedMessage}")
             } finally {
@@ -778,17 +817,31 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun updateDynamicShortcuts(category: String) {
         val context = getApplication<Application>()
-        val shortcut = ShortcutInfoCompat.Builder(context, category)
-            .setShortLabel(category.replaceFirstChar { it.uppercase() })
-            .setIcon(IconCompat.createWithResource(context, android.R.drawable.ic_menu_agenda))
-            .setIntent(
-                Intent(Intent.ACTION_VIEW, "newsapp://category/$category".toUri()).apply {
-                    `package` = context.packageName
-                    setClass(context, MainActivity::class.java)
-                }
-            )
-            .build()
+        try {
+            // Android forbids pushing dynamic shortcuts whose IDs collide with static
+            // manifest shortcuts (shortcuts.xml declares "technology"/"bookmarks") -
+            // that collision threw IllegalArgumentException and crashed the app.
+            val staticIds = context.getSystemService(ShortcutManager::class.java)
+                ?.getShortcuts(ShortcutManager.FLAG_MATCH_MANIFEST)
+                ?.mapNotNull { it.id }
+                ?.toSet()
+                ?: emptySet()
+            if (category in staticIds) return
 
-        ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+            val shortcut = ShortcutInfoCompat.Builder(context, category)
+                .setShortLabel(category.replaceFirstChar { it.uppercase() })
+                .setIcon(IconCompat.createWithResource(context, android.R.drawable.ic_menu_agenda))
+                .setIntent(
+                    Intent(Intent.ACTION_VIEW, "newsapp://category/$category".toUri()).apply {
+                        `package` = context.packageName
+                        setClass(context, MainActivity::class.java)
+                    }
+                )
+                .build()
+
+            ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+        } catch (e: Exception) {
+            // Shortcut bookkeeping must never take the app down.
+        }
     }
 }

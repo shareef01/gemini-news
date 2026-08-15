@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +37,8 @@ import coil.compose.AsyncImage
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.ui.components.ShimmerList
 import kotlinx.coroutines.flow.Flow
+import java.time.Duration
+import java.time.Instant
 
 @Composable
 fun NewsListContent(
@@ -51,6 +54,7 @@ fun NewsListContent(
     val isLoadingMore by viewModel.isLoadingMore.collectAsState()
     val smartThemes by viewModel.smartThemes.collectAsState()
     val selectedSmartTheme by viewModel.selectedSmartTheme.collectAsState()
+    val countryCode by viewModel.countryCode.collectAsState()
 
     val context = LocalContext.current
 
@@ -64,8 +68,9 @@ fun NewsListContent(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             shape = androidx.compose.foundation.shape.CircleShape,
-            color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
-            tonalElevation = 2.dp
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 3.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Row(
                 modifier = Modifier
@@ -200,22 +205,46 @@ fun NewsListContent(
                             }
                         }
                         is NewsUiState.Success -> {
-                            NewsList(
-                                articles = state.articles,
-                                isLoadingMore = isLoadingMore,
-                                onSummarize = { article -> viewModel.summarizeArticle(article) },
-                                onBookmarkToggle = { article -> viewModel.toggleBookmark(article) },
-                                isBookmarked = { url -> viewModel.isBookmarked(url) },
-                                onLoadMore = { viewModel.loadNextPage() },
-                                onReadMore = { article ->
-                                    viewModel.addToHistory(article)
-                                    onArticleSelected(article)
-                                },
-                                onReadingMode = { article ->
-                                    viewModel.addToHistory(article)
-                                    onReadingModeSelected(article)
-                                }
-                            )
+                            if (state.articles.isEmpty()) {
+                                EmptyState(
+                                    icon = when (selectedCategory) {
+                                        "bookmarks" -> Icons.Default.BookmarkBorder
+                                        "history" -> Icons.Default.History
+                                        else -> if (searchQuery.isNotEmpty()) Icons.Default.SearchOff else Icons.Default.Article
+                                    },
+                                    title = when (selectedCategory) {
+                                        "bookmarks" -> "No bookmarks yet"
+                                        "history" -> "No reading history yet"
+                                        else -> if (searchQuery.isNotEmpty()) "No results found" else "No headlines for ${countryName(countryCode)}"
+                                    },
+                                    message = when (selectedCategory) {
+                                        "bookmarks" -> "Tap the bookmark icon on any article to save it here."
+                                        "history" -> "Articles you read will appear here."
+                                        else -> if (searchQuery.isNotEmpty()) {
+                                            "Try different keywords or check your connection."
+                                        } else {
+                                            "Pull to refresh or try another category."
+                                        }
+                                    }
+                                )
+                            } else {
+                                NewsList(
+                                    articles = state.articles,
+                                    isLoadingMore = isLoadingMore,
+                                    onSummarize = { article -> viewModel.summarizeArticle(article) },
+                                    onBookmarkToggle = { article -> viewModel.toggleBookmark(article) },
+                                    isBookmarked = { url -> viewModel.isBookmarked(url) },
+                                    onLoadMore = { viewModel.loadNextPage() },
+                                    onReadMore = { article ->
+                                        viewModel.addToHistory(article)
+                                        onArticleSelected(article)
+                                    },
+                                    onReadingMode = { article ->
+                                        viewModel.addToHistory(article)
+                                        onReadingModeSelected(article)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -225,7 +254,7 @@ fun NewsListContent(
 }
 
 @Composable
-fun AIProgressOverlay(message: String) {
+fun AIProgressOverlay(message: String, onCancel: (() -> Unit)? = null) {
     val infiniteTransition = rememberInfiniteTransition(label = "aiAura")
     
     val pulse1 by infiniteTransition.animateFloat(
@@ -287,6 +316,12 @@ fun AIProgressOverlay(message: String) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
+            if (onCancel != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(onClick = onCancel) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 }
@@ -304,16 +339,33 @@ fun CategoryChips(
     ) {
         items(categories) { category ->
             val label = when(category) {
-                "smart" -> "Smart ✨"
-                "for_you" -> "For You ✨"
+                "smart" -> "Smart"
+                "for_you" -> "For You"
                 "bookmarks" -> "Bookmarks"
                 "history" -> "History"
                 else -> category.replaceFirstChar { it.uppercase() }
             }
+            val icon = when(category) {
+                "smart" -> Icons.Default.AutoAwesome
+                "for_you" -> Icons.Default.Insights
+                "general" -> Icons.Default.Public
+                "business" -> Icons.Default.BusinessCenter
+                "entertainment" -> Icons.Default.Movie
+                "health" -> Icons.Default.HealthAndSafety
+                "science" -> Icons.Default.Science
+                "sports" -> Icons.Default.SportsBasketball
+                "technology" -> Icons.Default.Memory
+                "bookmarks" -> Icons.Default.Bookmark
+                "history" -> Icons.Default.History
+                else -> null
+            }
             FilterChip(
                 selected = selectedCategory == category,
                 onClick = { onCategorySelected(category) },
-                label = { Text(label) }
+                label = { Text(label) },
+                leadingIcon = icon?.let {
+                    { Icon(it, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                }
             )
         }
     }
@@ -390,18 +442,9 @@ fun ArticleCard(
 ) {
     val context = LocalContext.current
     val isBookmarked by isBookmarkedFlow.collectAsState(initial = false)
-    
-    var isPressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
-        label = "scale"
-    )
 
     ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale),
+        modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp, pressedElevation = 8.dp),
         shape = MaterialTheme.shapes.extraLarge
     ) {
@@ -417,14 +460,14 @@ fun ArticleCard(
                                 .height(220.dp),
                             contentScale = ContentScale.Crop
                         )
-                        // Gradient overlay for better readability of potential top tags
+                        // Scrim behind the floating actions for contrast
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(60.dp)
+                                .height(72.dp)
                                 .background(
                                     brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                        colors = listOf(Color.Black.copy(alpha = 0.4f), Color.Transparent)
+                                        colors = listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent)
                                     )
                                 )
                         )
@@ -438,20 +481,31 @@ fun ArticleCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = MaterialTheme.shapes.small
-                    ) {
-                        Text(
-                            text = article.source.name,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(
+                                text = article.source.name,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        val timeAgo = formatTimeAgo(article.publishedAt)
+                        if (timeAgo.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "•  $timeAgo",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                     article.description?.let {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = it,
                             style = MaterialTheme.typography.bodyMedium,
@@ -470,42 +524,55 @@ fun ArticleCard(
                                 onClick = onReadMore,
                                 contentPadding = PaddingValues(horizontal = 8.dp)
                             ) {
+                                Icon(
+                                    imageVector = Icons.Default.Public,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text("Web", style = MaterialTheme.typography.labelMedium)
                             }
                             TextButton(
                                 onClick = onReadingMode,
                                 contentPadding = PaddingValues(horizontal = 8.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.AutoAwesome,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Reader", style = MaterialTheme.typography.labelMedium)
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Reader", style = MaterialTheme.typography.labelMedium)
                             }
                         }
-                        
-                        Button(
+
+                        FilledTonalButton(
                             onClick = onSummarize,
                             shape = MaterialTheme.shapes.large,
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                         ) {
-                            Text("Summarize ✨", maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Summarize", maxLines = 1, style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
             }
 
+            // Floating share / bookmark actions over the image
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(8.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
-                shape = CircleCornerShape
+                    .padding(10.dp),
+                color = Color.Black.copy(alpha = 0.45f),
+                shape = androidx.compose.foundation.shape.CircleShape
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = {
@@ -520,7 +587,7 @@ fun ArticleCard(
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = "Share",
-                            tint = MaterialTheme.colorScheme.onSurface,
+                            tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -529,7 +596,7 @@ fun ArticleCard(
                         Icon(
                             imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
                             contentDescription = "Bookmark",
-                            tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            tint = if (isBookmarked) MaterialTheme.colorScheme.tertiary else Color.White,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -539,4 +606,70 @@ fun ArticleCard(
     }
 }
 
-val CircleCornerShape = androidx.compose.foundation.shape.CircleShape
+private fun formatTimeAgo(publishedAt: String): String {
+    return try {
+        val published = Instant.parse(publishedAt)
+        val minutes = Duration.between(published, Instant.now()).toMinutes()
+        when {
+            minutes < 1 -> "Just now"
+            minutes < 60 -> "${minutes}m ago"
+            else -> {
+                val hours = minutes / 60
+                if (hours < 24) "${hours}h ago" else "${hours / 24}d ago"
+            }
+        }
+    } catch (e: Exception) {
+        ""
+    }
+}
+
+private fun countryName(code: String): String = when (code) {
+    "us" -> "United States"
+    "gb" -> "United Kingdom"
+    "in" -> "India"
+    "au" -> "Australia"
+    "ca" -> "Canada"
+    "de" -> "Germany"
+    "fr" -> "France"
+    else -> code
+}
+
+@Composable
+fun EmptyState(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    message: String
+) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(96.dp),
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.padding(28.dp).fillMaxSize(),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
