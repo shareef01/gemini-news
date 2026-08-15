@@ -13,6 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+keystore.properties
+/keystore/
 
 # Local agent workspace
 .reasonix/
+.kotlin/

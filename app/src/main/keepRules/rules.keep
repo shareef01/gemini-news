@@ -10,3 +10,23 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+
+# kotlinx.serialization (NewsAPI response models)
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.AnnotationsKt
+-keepclassmembers class kotlinx.serialization.json.** {
+    *** Companion;
+}
+-keepclasseswithmembers class kotlinx.serialization.json.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keep,includedescriptorclasses class com.aus.gemini01.**$$serializer { *; }
+-keepclassmembers class com.aus.gemini01.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.aus.gemini01.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# Retrofit (generic signatures used reflectively)
+-keepattributes Signature, Exceptions, RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations

@@ -17,6 +17,12 @@ val newsApiKey: String = localProperties.getProperty("NEWS_API_KEY")
     ?: System.getenv("NEWS_API_KEY")
     ?: ""
 
+// Local release signing (git-ignored keystore, for release testing only).
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.aus.gemini01"
     compileSdk {
@@ -35,11 +41,21 @@ android {
         buildConfigField("String", "NEWS_API_KEY", "\"$newsApiKey\"")
     }
 
+    signingConfigs {
+        create("release") {
+            if (keystorePropsFile.exists()) {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            optimization {
-                enable = false
-            }
+            isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {

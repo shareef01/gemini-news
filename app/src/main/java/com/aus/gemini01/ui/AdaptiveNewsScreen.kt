@@ -30,6 +30,14 @@ fun AdaptiveNewsScreen(
 ) {
     val navigator = rememberListDetailPaneScaffoldNavigator<Article>()
     val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Surface refresh/mapping errors that were previously swallowed silently.
+    LaunchedEffect(Unit) {
+        viewModel.errorEvents.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
     val uiState by viewModel.uiState.collectAsState()
     val readerViewContent by viewModel.readerViewContent.collectAsState()
     val isSpeaking by viewModel.isSpeaking.collectAsState()
@@ -79,6 +87,7 @@ fun AdaptiveNewsScreen(
             listPane = {
                 AnimatedPane {
                     Scaffold(
+                        snackbarHost = { SnackbarHost(snackbarHostState) },
                         topBar = {
                             TopAppBar(
                                 title = {
