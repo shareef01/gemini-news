@@ -22,8 +22,18 @@ class NewsWorker(
 
         return try {
             val countryCode = settingsRepository.countryCode.first()
-            val articles = newsRepository.getTopHeadlines(countryCode = countryCode)
-            
+            // Free tier: 100 req/day cap. Polling every hour burns ~24/day before
+            // the user even opens the app. Skip the background fetch.
+            if (settingsRepository.newsApiFreeTier.first()) {
+                return Result.success()
+            }
+            // Don't surface cached articles as "breaking news" - that would notify
+            // users about stale stories when the network is unreachable.
+            val articles = newsRepository.getTopHeadlines(
+                countryCode = countryCode,
+                allowOfflineFallback = false
+            )
+
             if (articles.isNotEmpty()) {
                 val latestArticle = articles[0]
                 val lastNotifiedUrl = settingsRepository.lastNotifiedUrl.first()

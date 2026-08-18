@@ -16,6 +16,9 @@ val localProperties = Properties().apply {
 val newsApiKey: String = localProperties.getProperty("NEWS_API_KEY")
     ?: System.getenv("NEWS_API_KEY")
     ?: ""
+val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY")
+    ?: System.getenv("MAPS_API_KEY")
+    ?: ""
 
 // Local release signing (git-ignored keystore, for release testing only).
 val keystorePropsFile = rootProject.file("keystore.properties")
@@ -39,6 +42,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "NEWS_API_KEY", "\"$newsApiKey\"")
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = mapsApiKey
     }
 
     signingConfigs {
@@ -55,6 +59,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -81,10 +86,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.firebase.ai)
     implementation(libs.firebase.appcheck.playintegrity)
-    debugImplementation(libs.firebase.appcheck.debug)
+    implementation(libs.firebase.appcheck.debug)
     implementation(libs.retrofit)
     implementation(libs.retrofit.serialization)
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

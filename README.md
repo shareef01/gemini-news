@@ -42,7 +42,7 @@
     `NEWS_API_KEY=your_key_here` (it is exposed to the app as `BuildConfig.NEWS_API_KEY` — never commit it).
     A pre-commit hook blocks accidental secret commits; in fresh clones enable it with
     `git config core.hooksPath .githooks`.
-2.  **Google Maps**: Add your Google Maps API Key to `AndroidManifest.xml`.
+2.  **Google Maps**: Add your Google Maps API Key to your git-ignored `local.properties` file as `MAPS_API_KEY=your_key_here` (it is injected into `AndroidManifest.xml` as `${GOOGLE_MAPS_API_KEY}` at build time — never commit it).
 3.  **Firebase**: Connect your project to Firebase and enable **Vertex AI for Firebase**.
 
 ---

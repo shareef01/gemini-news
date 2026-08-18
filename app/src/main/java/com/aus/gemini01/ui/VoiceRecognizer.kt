@@ -11,7 +11,8 @@ import java.util.Locale
 class VoiceRecognizer(
     private val context: Context,
     private val onResult: (String) -> Unit,
-    private val onStateChange: (Boolean) -> Unit
+    private val onStateChange: (Boolean) -> Unit,
+    private val onError: (Int) -> Unit = {}
 ) : RecognitionListener {
 
     private var speechRecognizer: SpeechRecognizer? = null
@@ -58,6 +59,9 @@ class VoiceRecognizer(
     }
     override fun onError(error: Int) {
         onStateChange(false)
+        // Surface recognizer failures (no match, network, busy, etc.) so they
+        // reach the user via a snackbar instead of dying silently.
+        onError(error)
     }
     override fun onPartialResults(partialResults: Bundle?) {}
     override fun onEvent(eventType: Int, params: Bundle?) {}

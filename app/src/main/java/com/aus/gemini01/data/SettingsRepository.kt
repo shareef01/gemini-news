@@ -21,6 +21,7 @@ class SettingsRepository(private val context: Context) {
     private val notificationsEnabledKey = booleanPreferencesKey("notifications_enabled")
     private val languageKey = stringPreferencesKey("preferred_language")
     private val remindersEnabledKey = booleanPreferencesKey("reminders_enabled")
+    private val freeTierKey = booleanPreferencesKey("newsapi_free_tier")
 
     val countryCode: Flow<String> = context.dataStore.data
         .map { preferences ->
@@ -52,6 +53,11 @@ class SettingsRepository(private val context: Context) {
             preferences[notificationsEnabledKey] ?: false
         }
 
+    val newsApiFreeTier: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[freeTierKey] ?: true
+        }
+
     suspend fun setCountryCode(code: String) {
         context.dataStore.edit { preferences ->
             preferences[countryKey] = code
@@ -79,6 +85,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setRemindersEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[remindersEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setNewsApiFreeTier(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[freeTierKey] = enabled
         }
     }
 }

@@ -28,6 +28,9 @@ interface NewsDao {
     @Query("DELETE FROM cached_articles WHERE category = :category")
     suspend fun deleteCachedArticlesByCategory(category: String)
 
+    @Query("DELETE FROM cached_articles WHERE publishedAt < :cutoff")
+    suspend fun deleteCachedArticlesOlderThan(cutoff: String)
+
     // History Methods
     @Query("SELECT * FROM history_articles ORDER BY viewedAt DESC")
     fun getAllHistory(): Flow<List<HistoryArticleEntity>>

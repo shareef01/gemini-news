@@ -65,7 +65,23 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     private val voiceRecognizer = VoiceRecognizer(
         context = application,
         onResult = { query -> searchNews(query) },
-        onStateChange = { isListening -> _isListening.value = isListening }
+        onStateChange = { isListening -> _isListening.value = isListening },
+        onError = { code ->
+            val message = when (code) {
+                android.speech.SpeechRecognizer.ERROR_NO_MATCH,
+                android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                    "I couldn't hear a search query. Try again."
+                android.speech.SpeechRecognizer.ERROR_NETWORK,
+                android.speech.SpeechRecognizer.ERROR_SERVER ->
+                    "Voice search needs a network connection."
+                android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+                    "Microphone permission was denied."
+                android.speech.SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
+                    "Voice search is busy. Try again in a moment."
+                else -> "Voice search failed. Please try again."
+            }
+            viewModelScope.launch { _errorEvents.emit(message) }
+        }
     )
     private val generativeModel = Firebase.ai.generativeModel(
         modelName = "gemini-flash-latest",
@@ -88,6 +104,9 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
 
     val remindersEnabled: StateFlow<Boolean> = settingsRepository.remindersEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val newsApiFreeTier: StateFlow<Boolean> = settingsRepository.newsApiFreeTier
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     val preferredLanguage: StateFlow<String> = settingsRepository.preferredLanguage
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "English")
@@ -309,7 +328,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     .toList()
                 
                 if (recentArticles.isEmpty()) {
-                    _uiState.value = NewsUiState.Error("Bookmark or read some articles first so Gemini can learn your interests!")
+                    // Empty state, not an error - the UI handles empty Success per category.
+                    _uiState.value = NewsUiState.Success(emptyList())
                     return@launch
                 }
 
@@ -462,9 +482,21 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setNewsApiFreeTier(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setNewsApiFreeTier(enabled)
+        }
+    }
+
     fun setPreferredLanguage(language: String) {
         viewModelScope.launch {
             settingsRepository.setPreferredLanguage(language)
+            // The chat session was primed in the previous language. Stale messages
+            // would be answered in the old language; reset so the next user turn
+            // re-seeds the system prompt in the new language.
+            if (_chatMessages.value.isNotEmpty()) {
+                clearChat()
+            }
         }
     }
 
@@ -705,19 +737,9 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
 
                 val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
                 val responseText = response.text ?: ""
-                
-                val newThemes = mutableMapOf<String, List<Article>>()
-                responseText.lines().forEach { line ->
-                    if (line.contains(":")) {
-                        val parts = line.split(":")
-                        val themeName = parts[0].trim()
-                        val indices = parts[1].split(",").mapNotNull { it.trim().toIntOrNull() }
-                        val themeArticles = indices.mapNotNull { currentArticles.getOrNull(it) }
-                        if (themeArticles.isNotEmpty()) {
-                            newThemes[themeName] = themeArticles
-                        }
-                    }
-                }
+
+                val parseResult = parseSmartThemesResponse(responseText, currentArticles)
+                val newThemes = parseResult.themes
 
                 if (newThemes.isNotEmpty()) {
                     _smartThemes.value = newThemes
@@ -773,19 +795,13 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
 
                 val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
                 val responseText = response.text ?: ""
-                
-                val locations = responseText.lines().mapNotNull { line ->
-                    val parts = line.split("|").map { it.trim() }
-                    if (parts.size >= 5) {
-                        val lat = parts[1].toDoubleOrNull()
-                        val lng = parts[2].toDoubleOrNull()
-                        if (lat != null && lng != null) {
-                            NewsLocation(parts[0], lat, lng, parts[3], parts[4])
-                        } else null
-                    } else null
+
+                val parseResult = parseLocationsResponse(responseText)
+                _newsLocations.value = parseResult.locations
+
+                if (parseResult.locations.isEmpty() && parseResult.skippedLines > 0) {
+                    _errorEvents.emit("Gemini's location response couldn't be mapped.")
                 }
-                
-                _newsLocations.value = locations
             } catch (e: TimeoutCancellationException) {
                 _errorEvents.emit("Mapping timed out. Please try again.")
             } catch (e: CancellationException) {

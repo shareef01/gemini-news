@@ -32,6 +32,7 @@ fun SettingsScreen(
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
     val remindersEnabled by viewModel.remindersEnabled.collectAsState()
     val preferredLanguage by viewModel.preferredLanguage.collectAsState()
+    val newsApiFreeTier by viewModel.newsApiFreeTier.collectAsState()
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -197,6 +198,27 @@ fun SettingsScreen(
                 title = "Data Management",
                 icon = Icons.Default.Storage
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("NewsAPI free tier", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Limit background refreshes (100 requests/day)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = newsApiFreeTier,
+                        onCheckedChange = { viewModel.setNewsApiFreeTier(it) }
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
                 OutlinedButton(
                     onClick = { viewModel.clearCache() },
                     modifier = Modifier.fillMaxWidth()

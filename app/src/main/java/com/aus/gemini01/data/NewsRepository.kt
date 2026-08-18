@@ -8,9 +8,14 @@ import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+
+// Cached articles older than this are pruned on every fresh fetch, so the cache
+// doesn't accumulate stale news indefinitely.
+private const val CACHE_TTL_DAYS = 7L
 
 class NewsRepository(private val newsDao: NewsDao) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -31,14 +36,15 @@ class NewsRepository(private val newsDao: NewsDao) {
     suspend fun getTopHeadlines(
         category: String? = null,
         page: Int = 1,
-        countryCode: String = "us"
+        countryCode: String = "us",
+        allowOfflineFallback: Boolean = true
     ): List<Article> {
         val effectiveCategory = category ?: "general"
 
         return try {
             val response = apiService.getTopHeadlines(
                 country = countryCode,
-                category = category,
+                category = effectiveCategory,
                 page = page,
                 apiKey = BuildConfig.NEWS_API_KEY
             )
@@ -46,6 +52,8 @@ class NewsRepository(private val newsDao: NewsDao) {
 
             // Only cache the first page
             if (page == 1 && category != "bookmarks") {
+                val cutoff = Instant.now().minusSeconds(CACHE_TTL_DAYS * 24 * 3600).toString()
+                newsDao.deleteCachedArticlesOlderThan(cutoff)
                 newsDao.deleteCachedArticlesByCategory(effectiveCategory)
                 newsDao.insertCachedArticles(articles.map { it.toCachedEntity(effectiveCategory) })
             }
@@ -56,6 +64,7 @@ class NewsRepository(private val newsDao: NewsDao) {
             // category overwrite the one the user actually navigated to.
             throw e
         } catch (e: Exception) {
+            if (!allowOfflineFallback) throw e
             // Offline fallback: serve the cached feed. If there is nothing cached,
             // surface the real error instead of fabricating articles.
             if (page == 1) {

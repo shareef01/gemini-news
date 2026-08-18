@@ -35,12 +35,12 @@ class TtsManager(context: Context) : TextToSpeech.OnInitListener {
 
     private fun getLocaleForLanguage(languageName: String): Locale {
         return when (languageName.lowercase()) {
-            "spanish" -> Locale("es", "ES")
-            "french" -> Locale.FRENCH
-            "german" -> Locale.GERMAN
-            "chinese" -> Locale.CHINESE
-            "arabic" -> Locale("ar")
-            "portuguese" -> Locale("pt", "PT")
+            "spanish" -> Locale.forLanguageTag("es-ES")
+            "french" -> Locale.forLanguageTag("fr-FR")
+            "german" -> Locale.forLanguageTag("de-DE")
+            "chinese" -> Locale.forLanguageTag("zh-CN")
+            "arabic" -> Locale.forLanguageTag("ar")
+            "portuguese" -> Locale.forLanguageTag("pt-PT")
             else -> Locale.US
         }
     }

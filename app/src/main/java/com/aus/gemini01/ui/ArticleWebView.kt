@@ -1,11 +1,13 @@
 package com.aus.gemini01.ui
 
-import android.net.Uri
+import android.net.http.SslError
+import android.webkit.SslErrorHandler
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.core.net.toUri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -51,15 +53,27 @@ fun ArticleWebView(
                             val scheme = request?.url?.scheme
                             return scheme != null && scheme != "http" && scheme != "https"
                         }
+
+                        override fun onReceivedSslError(
+                            view: WebView?,
+                            handler: SslErrorHandler?,
+                            error: SslError?
+                        ) {
+                            // Don't blindly trust invalid certs - that's how MITM attacks
+                            // get a free pass. The default handler shows a confirm dialog
+                            // and continues; we cancel instead.
+                            handler?.cancel()
+                        }
                     }
                     settings.apply {
                         javaScriptEnabled = true
                         allowFileAccess = false
                         allowContentAccess = false
                         javaScriptCanOpenWindowsAutomatically = false
+                        domStorageEnabled = false
                     }
                     // Defensive: article.url arrives from a third-party feed.
-                    if (Uri.parse(url).scheme in setOf("http", "https")) {
+                    if (url.toUri().scheme in setOf("http", "https")) {
                         loadUrl(url)
                     }
                 }

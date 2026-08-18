@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -34,7 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.ui.components.ShimmerList
 import kotlinx.coroutines.flow.Flow
@@ -218,16 +219,19 @@ fun NewsListContent(
                                     icon = when (selectedCategory) {
                                         "bookmarks" -> Icons.Default.BookmarkBorder
                                         "history" -> Icons.Default.History
-                                        else -> if (searchQuery.isNotEmpty()) Icons.Default.SearchOff else Icons.Default.Article
+                                        "for_you" -> Icons.Default.PersonSearch
+                                        else -> if (searchQuery.isNotEmpty()) Icons.Default.SearchOff else Icons.AutoMirrored.Filled.Article
                                     },
                                     title = when (selectedCategory) {
                                         "bookmarks" -> "No bookmarks yet"
                                         "history" -> "No reading history yet"
+                                        "for_you" -> "Get to know your taste"
                                         else -> if (searchQuery.isNotEmpty()) "No results found" else "No headlines for ${countryName(countryCode)}"
                                     },
                                     message = when (selectedCategory) {
                                         "bookmarks" -> "Tap the bookmark icon on any article to save it here."
                                         "history" -> "Articles you read will appear here."
+                                        "for_you" -> "Bookmark or read a few articles so Gemini can learn what you like."
                                         else -> if (searchQuery.isNotEmpty()) {
                                             "Try different keywords or check your connection."
                                         } else {
@@ -492,11 +496,9 @@ fun ArticleCard(
                         }
                     }
 
-                    article.urlToImage?.let { imageUrl ->
+                    safeImageUrl(article.urlToImage)?.let { imageUrl ->
                         AsyncImage(
-                            // Many feeds serve http:// images, which Android blocks;
-                            // most hosts also serve the same image over https.
-                            model = imageUrl.replaceFirst("http://", "https://"),
+                            model = imageUrl,
                             contentDescription = null,
                             modifier = Modifier
                                 .fillMaxWidth()
