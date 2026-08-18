@@ -298,6 +298,11 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         fetchJob = viewModelScope.launch {
             try {
                 val articles = repository.getTopHeadlines(category, currentPage, countryCode.value)
+                // Cancellation should already have prevented landing here, but guard
+                // anyway in case a sibling job slipped through.
+                if (_searchQuery.value.isNotEmpty() || _selectedCategory.value != category) {
+                    return@launch
+                }
                 _uiState.value = NewsUiState.Success(articles)
                 if (articles.isEmpty()) isLastPage = true
             } catch (e: CancellationException) {
@@ -373,6 +378,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     fun searchNews(query: String) {
         _searchQuery.value = query
         searchJob?.cancel()
+        // Without these, an in-flight category fetch or AI analysis would
+        // overwrite the search results when it completes.
+        fetchJob?.cancel()
+        analysisJob?.cancel()
         if (query.isBlank()) {
             fetchNews("general")
             return
