@@ -13,12 +13,19 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+import java.io.IOException
+
 // Cached articles older than this are pruned on every fresh fetch, so the cache
 // doesn't accumulate stale news indefinitely.
 private const val CACHE_TTL_DAYS = 7L
 
 class NewsRepository(private val newsDao: NewsDao) {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        isLenient = true
+        explicitNulls = false
+    }
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -48,7 +55,17 @@ class NewsRepository(private val newsDao: NewsDao) {
                 page = page,
                 apiKey = BuildConfig.NEWS_API_KEY
             )
-            val articles = response.articles
+
+            if (response.status == "error") {
+                throw IOException(response.message ?: "News API error: ${response.code}")
+            }
+
+            val articles = response.articles.filter {
+                it.title.isNotBlank() &&
+                it.title != "[Removed]" &&
+                it.url.isNotBlank() &&
+                it.url != "https://removed.com"
+            }
 
             // Only cache the first page
             if (page == 1 && category != "bookmarks") {
@@ -81,7 +98,16 @@ class NewsRepository(private val newsDao: NewsDao) {
     }
 
     suspend fun searchNews(query: String, page: Int = 1): List<Article> {
-        return apiService.searchNews(query = query, page = page, apiKey = BuildConfig.NEWS_API_KEY).articles
+        val response = apiService.searchNews(query = query, page = page, apiKey = BuildConfig.NEWS_API_KEY)
+        if (response.status == "error") {
+            throw IOException(response.message ?: "News API error: ${response.code}")
+        }
+        return response.articles.filter {
+            it.title.isNotBlank() &&
+            it.title != "[Removed]" &&
+            it.url.isNotBlank() &&
+            it.url != "https://removed.com"
+        }
     }
 
     // Local Bookmark Methods
