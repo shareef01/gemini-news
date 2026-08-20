@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -68,7 +69,7 @@ fun NewsListContent(
     }
 
     val categories = listOf(
-        "smart", "for_you", "general", "business", "entertainment", "health", "science", "sports", "technology", "bookmarks", "history"
+        "general", "technology", "business", "entertainment", "sports", "science", "health", "for_you", "smart", "bookmarks", "history"
     )
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -351,16 +352,17 @@ fun CategoryChips(
     ) {
         items(categories) { category ->
             val label = when(category) {
-                "smart" -> "Smart"
+                "general" -> "Top Stories"
+                "smart" -> "Smart Themes"
                 "for_you" -> "For You"
                 "bookmarks" -> "Bookmarks"
                 "history" -> "History"
                 else -> category.replaceFirstChar { it.uppercase() }
             }
             val icon = when(category) {
+                "general" -> Icons.AutoMirrored.Filled.TrendingUp
                 "smart" -> Icons.Default.AutoAwesome
                 "for_you" -> Icons.Default.Insights
-                "general" -> Icons.Default.Public
                 "business" -> Icons.Default.BusinessCenter
                 "entertainment" -> Icons.Default.Movie
                 "health" -> Icons.Default.HealthAndSafety
@@ -456,8 +458,9 @@ fun ArticleCard(
     val isBookmarked by isBookmarkedFlow.collectAsState(initial = false)
 
     ElevatedCard(
+        onClick = onReadingMode,
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp, pressedElevation = 8.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp, pressedElevation = 6.dp),
         shape = MaterialTheme.shapes.extraLarge
     ) {
         Box {

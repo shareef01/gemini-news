@@ -48,7 +48,7 @@ fun NewsMapScreen(
         ) {
             locations.forEach { location ->
                 Marker(
-                    state = rememberMarkerState(position = LatLng(location.latitude, location.longitude)),
+                    state = rememberUpdatedMarkerState(position = LatLng(location.latitude, location.longitude)),
                     title = location.name,
                     snippet = location.articleTitle,
                     onInfoWindowClick = {

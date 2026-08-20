@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
@@ -23,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aus.gemini01.data.Article
+import com.aus.gemini01.data.ai.AiResult
+import com.aus.gemini01.data.ai.friendlyMessage
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalMaterial3Api::class)
@@ -144,7 +147,7 @@ fun AdaptiveNewsScreen(
                     if (currentDetailArticle != null) {
                         if (readerViewContent != null) {
                             ReadingModeScreen(
-                                content = readerViewContent!!,
+                                result = readerViewContent!!,
                                 isSpeaking = isSpeaking,
                                 onBack = { 
                                     viewModel.clearReaderView()
@@ -154,7 +157,13 @@ fun AdaptiveNewsScreen(
                                     selectedArticleForWeb = currentDetailArticle
                                     viewModel.clearReaderView()
                                 },
-                                onToggleReadAloud = { viewModel.toggleReadAloud(readerViewContent!!) }
+                                onRetry = {
+                                    viewModel.fetchReaderView(currentDetailArticle)
+                                },
+                                onToggleReadAloud = {
+                                    val text = (readerViewContent as? AiResult.Success)?.text
+                                    if (text != null) viewModel.toggleReadAloud(text)
+                                }
                             )
                         } else if (selectedArticleForWeb != null) {
                             ArticleWebView(
@@ -197,7 +206,7 @@ fun AdaptiveNewsScreen(
                                         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
                                     ) {
                                         Icon(
-                                            Icons.Default.MenuBook,
+                                            Icons.AutoMirrored.Filled.MenuBook,
                                             contentDescription = null,
                                             modifier = Modifier.padding(26.dp).fillMaxSize(),
                                             tint = MaterialTheme.colorScheme.primary
@@ -245,59 +254,110 @@ fun AdaptiveNewsScreen(
 fun AIDialog(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    content: String,
+    result: AiResult,
     onDismiss: () -> Unit,
+    onRetry: (() -> Unit)? = null,
     confirmText: String = "Got it"
 ) {
+    val context = LocalContext.current
+    val isSuccess = result is AiResult.Success
+    var copied by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        // Widen the dialog so AI content (bullet lists, entities) fits comfortably.
-        modifier = Modifier.fillMaxWidth(0.92f),
+        modifier = Modifier.fillMaxWidth(0.94f),
         properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .padding(8.dp)
-                            .size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                        color = if (isSuccess) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Icon(
+                            if (isSuccess) icon else Icons.Default.WarningAmber,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .padding(10.dp)
+                                .size(22.dp),
+                            tint = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            if (isSuccess) title else "AI Notice",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            if (isSuccess) "Generated by Gemini AI" else "Gemini AI",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "Generated by Gemini AI",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+
+                if (isSuccess && result is AiResult.Success) {
+                    IconButton(onClick = {
+                        val text = result.text
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Gemini Insights", text)
+                        clipboard.setPrimaryClip(clip)
+                        copied = true
+                    }) {
+                        Icon(
+                            if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                            contentDescription = "Copy Insights",
+                            tint = if (copied) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         },
         text = {
             val scrollState = rememberScrollState()
             SelectionContainer {
-                MarkdownText(
-                    text = content,
-                    modifier = Modifier
-                        .heightIn(max = 460.dp)
-                        .verticalScroll(scrollState)
-                )
+                when (result) {
+                    is AiResult.Success -> {
+                        MarkdownText(
+                            text = result.text,
+                            modifier = Modifier
+                                .heightIn(max = 480.dp)
+                                .verticalScroll(scrollState)
+                        )
+                    }
+                    is AiResult.Failure -> {
+                        Text(
+                            text = result.error.friendlyMessage(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            FilledTonalButton(onClick = onDismiss, shape = MaterialTheme.shapes.large) {
-                Text(confirmText)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!isSuccess && onRetry != null) {
+                    TextButton(onClick = {
+                        onDismiss()
+                        onRetry()
+                    }) {
+                        Text("Try Again")
+                    }
+                }
+                FilledTonalButton(onClick = onDismiss, shape = MaterialTheme.shapes.large) {
+                    Text(confirmText)
+                }
             }
         },
         shape = MaterialTheme.shapes.extraLarge,
@@ -351,7 +411,7 @@ fun GlobalOverlays(viewModel: NewsViewModel) {
         AIDialog(
             title = "Gemini Insights",
             icon = Icons.Default.AutoAwesome,
-            content = it,
+            result = it,
             onDismiss = { viewModel.clearSummary() }
         )
     }
@@ -360,8 +420,9 @@ fun GlobalOverlays(viewModel: NewsViewModel) {
         AIDialog(
             title = "Global News Trends",
             icon = Icons.Default.LocalFireDepartment,
-            content = it,
-            onDismiss = { viewModel.clearTrendingTopics() }
+            result = it,
+            onDismiss = { viewModel.clearTrendingTopics() },
+            onRetry = { viewModel.analyzeTrendingTopics() }
         )
     }
 
@@ -369,8 +430,9 @@ fun GlobalOverlays(viewModel: NewsViewModel) {
         AIDialog(
             title = "Weekly News Insights",
             icon = Icons.Default.Insights,
-            content = it,
+            result = it,
             onDismiss = { viewModel.clearReadingStats() },
+            onRetry = { viewModel.fetchReadingStats() },
             confirmText = "Done"
         )
     }

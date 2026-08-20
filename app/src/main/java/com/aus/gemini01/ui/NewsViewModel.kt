@@ -13,6 +13,15 @@ import com.aus.gemini01.MainActivity
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.data.NewsRepository
 import com.aus.gemini01.data.SettingsRepository
+import com.aus.gemini01.data.ai.AiCacheKeys
+import com.aus.gemini01.data.ai.AiError
+import com.aus.gemini01.data.ai.AiFeature
+import com.aus.gemini01.data.ai.AiRepository
+import com.aus.gemini01.data.ai.AiRequestException
+import com.aus.gemini01.data.ai.AiResult
+import com.aus.gemini01.data.ai.DataStoreAiTelemetry
+import com.aus.gemini01.data.ai.GEMINI_MODEL
+import com.aus.gemini01.data.ai.friendlyMessage
 import com.aus.gemini01.data.local.AppDatabase
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
@@ -61,7 +70,11 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application)
     private val repository = NewsRepository(database.newsDao())
     private val settingsRepository = SettingsRepository(application)
-    private val ttsManager = TtsManager(application)
+    private val aiRepository = AiRepository(
+        dao = database.aiResultDao(),
+        telemetry = DataStoreAiTelemetry(application)
+    )
+    private val ttsManager = TtsManager(application, onPlaybackFinished = { _isSpeaking.value = false })
     private val voiceRecognizer = VoiceRecognizer(
         context = application,
         onResult = { query -> searchNews(query) },
@@ -84,7 +97,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         }
     )
     private val generativeModel = Firebase.ai.generativeModel(
-        modelName = "gemini-flash-latest",
+        modelName = GEMINI_MODEL,
     )
 
     private val _uiState = MutableStateFlow<NewsUiState>(NewsUiState.Loading)
@@ -111,11 +124,11 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     val preferredLanguage: StateFlow<String> = settingsRepository.preferredLanguage
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "English")
 
-    private val _summaryState = MutableStateFlow<String?>(null)
-    val summaryState: StateFlow<String?> = _summaryState.asStateFlow()
+    private val _summaryState = MutableStateFlow<AiResult?>(null)
+    val summaryState: StateFlow<AiResult?> = _summaryState.asStateFlow()
 
-    private val _readerViewContent = MutableStateFlow<String?>(null)
-    val readerViewContent: StateFlow<String?> = _readerViewContent.asStateFlow()
+    private val _readerViewContent = MutableStateFlow<AiResult?>(null)
+    val readerViewContent: StateFlow<AiResult?> = _readerViewContent.asStateFlow()
 
     private val _isSummarizing = MutableStateFlow(false)
     val isSummarizing: StateFlow<Boolean> = _isSummarizing.asStateFlow()
@@ -162,11 +175,11 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     private val _isChatting = MutableStateFlow(false)
     val isChatting: StateFlow<Boolean> = _isChatting.asStateFlow()
 
-    private val _readingStats = MutableStateFlow<String?>(null)
-    val readingStats: StateFlow<String?> = _readingStats.asStateFlow()
+    private val _readingStats = MutableStateFlow<AiResult?>(null)
+    val readingStats: StateFlow<AiResult?> = _readingStats.asStateFlow()
 
-    private val _trendingTopics = MutableStateFlow<String?>(null)
-    val trendingTopics: StateFlow<String?> = _trendingTopics.asStateFlow()
+    private val _trendingTopics = MutableStateFlow<AiResult?>(null)
+    val trendingTopics: StateFlow<AiResult?> = _trendingTopics.asStateFlow()
 
     private var forYouKeywords = ""
 
@@ -353,22 +366,31 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     Example: Space Exploration, AI, Electric Vehicles
                 """.trimIndent()
 
-                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
-                forYouKeywords = response.text?.trim() ?: "general"
-                
+                // Keywords are cached against the user's interaction set, so
+                // revisiting "For You" with unchanged habits costs no Gemini.
+                forYouKeywords = aiRepository.cachedOrFetch(
+                    cacheKey = AiCacheKeys.forYouKeywords(recentArticles.map { it.url }),
+                    feature = AiFeature.FOR_YOU
+                ) {
+                    withTimeout(90_000) { generativeModel.generateContent(prompt) }.text?.trim()
+                        ?: "general"
+                }
+
                 currentPage = 1
                 isLastPage = false
-                
+
                 val articles = repository.searchNews(forYouKeywords, currentPage)
                 _uiState.value = NewsUiState.Success(articles)
                 if (articles.isEmpty()) isLastPage = true
-                
+
             } catch (e: TimeoutCancellationException) {
-                _uiState.value = NewsUiState.Error("AI analysis timed out. Please try again.")
+                _uiState.value = NewsUiState.Error(AiError.Timeout.friendlyMessage())
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: AiRequestException) {
+                _uiState.value = NewsUiState.Error(e.error.friendlyMessage())
             } catch (e: Exception) {
-                _uiState.value = NewsUiState.Error("AI Analysis failed: ${e.localizedMessage}")
+                _uiState.value = NewsUiState.Error(AiError.Unknown(e.message).friendlyMessage())
             } finally {
                 _isAnalysingInterests.value = false
             }
@@ -520,6 +542,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     fun clearCache() {
         viewModelScope.launch {
             repository.clearCache()
+            aiRepository.clearCache()
             fetchNews()
         }
     }
@@ -533,19 +556,27 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     fun summarizeArticle(article: Article) {
         _isSummarizing.value = true
         _summaryState.value = null
-        
+
         analysisJob?.cancel()
         analysisJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 val prompt = """
                     $PROMPT_INJECTION_GUARD
 
-                    Analyze this news article and provide a structured summary with the following sections:
-                    1. **Key Takeaways**: Exactly 3 bullet points.
-                    2. **Sentiment**: One word (Positive, Negative, or Neutral).
-                    3. **Key Entities**: Mention major people, companies, or organizations involved.
+                    Analyze this news article and provide a clear, beautifully structured executive summary with these exact sections:
 
-                    IMPORTANT: Provide the entire response in ${preferredLanguage.value}.
+                    ## 📌 Key Takeaways
+                    - [Key point 1]
+                    - [Key point 2]
+                    - [Key point 3]
+
+                    ## 💡 Sentiment & Tone
+                    - Sentiment: [Positive | Negative | Neutral] — [One brief sentence explaining the tone and impact]
+
+                    ## 🏢 Key Entities & Context
+                    - [Notable people, companies, or organizations involved]
+
+                    IMPORTANT: Provide the entire response in ${preferredLanguage.value}. Format with clean markdown headers and bullet points. Do not include conversational preambles.
 
                     [[DATA]]
                     Title: ${article.title}
@@ -553,15 +584,24 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     Content: ${article.content ?: "N/A"}
                     [[/DATA]]
                 """.trimIndent()
-                
-                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
-                _summaryState.value = response.text
+
+                val text = aiRepository.cachedOrFetch(
+                    cacheKey = AiCacheKeys.summary(article.url, preferredLanguage.value),
+                    feature = AiFeature.SUMMARY,
+                    articleUrl = article.url
+                ) {
+                    withTimeout(90_000) { generativeModel.generateContent(prompt) }.text
+                        ?: throw IllegalStateException("Empty summary response")
+                }
+                _summaryState.value = AiResult.Success(text)
             } catch (e: TimeoutCancellationException) {
-                _summaryState.value = "The AI request timed out. Please try again."
+                _summaryState.value = AiResult.Failure(AiError.Timeout)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: AiRequestException) {
+                _summaryState.value = AiResult.Failure(e.error)
             } catch (e: Exception) {
-                _summaryState.value = "Failed to summarize: ${e.localizedMessage}"
+                _summaryState.value = AiResult.Failure(AiError.Unknown(e.message))
             } finally {
                 _isSummarizing.value = false
             }
@@ -601,12 +641,23 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     [[/DATA]]
                 """.trimIndent()
 
-                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
-                _readerViewContent.value = response.text
+                val text = aiRepository.cachedOrFetch(
+                    cacheKey = AiCacheKeys.reader(article.url, preferredLanguage.value),
+                    feature = AiFeature.READER,
+                    articleUrl = article.url
+                ) {
+                    withTimeout(90_000) { generativeModel.generateContent(prompt) }.text
+                        ?: throw IllegalStateException("Empty reader response")
+                }
+                _readerViewContent.value = AiResult.Success(text)
             } catch (e: TimeoutCancellationException) {
-                _readerViewContent.value = "Reader View generation timed out. Please try again."
+                _readerViewContent.value = AiResult.Failure(AiError.Timeout)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AiRequestException) {
+                _readerViewContent.value = AiResult.Failure(e.error)
             } catch (e: Exception) {
-                _readerViewContent.value = "Failed to generate Reader View: ${e.localizedMessage}"
+                _readerViewContent.value = AiResult.Failure(AiError.Unknown(e.message))
             } finally {
                 _isGeneratingReaderView.value = false
             }
@@ -627,7 +678,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val recentArticles = history.value.take(20)
                 if (recentArticles.isEmpty()) {
-                    _readingStats.value = "You haven't read enough articles yet! Engage with the news to see your stats."
+                    _readingStats.value = AiResult.Success("You haven't read enough articles yet! Engage with the news to see your stats.")
                     return@launch
                 }
 
@@ -641,22 +692,40 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     $titles
                     [[/DATA]]
                     
-                    Provide a fun and insightful summary of my week in news. Include:
-                    1. My **'News Personality'** (come up with a creative name like 'Tech Visionary' or 'Global Policy Expert').
-                    2. **Top 3 Themes** I've been following.
-                    3. A **Smart Recommendation** for what I might like to read next.
+                    Provide a fun and insightful summary of my week in news:
+                    ## 🌟 News Personality
+                    - [Creative title like 'Tech Visionary' or 'Global Policy Expert' with a short description]
+
+                    ## 📈 Top Themes Followed
+                    - [Theme 1]
+                    - [Theme 2]
+                    - [Theme 3]
+
+                    ## 🎯 Recommended Next Reads
+                    - [Smart suggestions for what topics to explore next]
 
                     Output the entire response in ${preferredLanguage.value}.
                 """.trimIndent()
 
-                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
-                _readingStats.value = response.text
+                val text = aiRepository.cachedOrFetch(
+                    cacheKey = AiCacheKeys.stats(
+                        recentArticles.map { it.url },
+                        preferredLanguage.value
+                    ),
+                    feature = AiFeature.STATS
+                ) {
+                    withTimeout(90_000) { generativeModel.generateContent(prompt) }.text
+                        ?: throw IllegalStateException("Empty stats response")
+                }
+                _readingStats.value = AiResult.Success(text)
             } catch (e: TimeoutCancellationException) {
-                _readingStats.value = "The AI request timed out. Please try again."
+                _readingStats.value = AiResult.Failure(AiError.Timeout)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: AiRequestException) {
+                _readingStats.value = AiResult.Failure(e.error)
             } catch (e: Exception) {
-                _readingStats.value = "Failed to analyze stats: ${e.localizedMessage}"
+                _readingStats.value = AiResult.Failure(AiError.Unknown(e.message))
             } finally {
                 _isAnalysingStats.value = false
             }
@@ -683,11 +752,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
 
                     Analyze these news headlines and identify the top 5 trending global narratives or themes.
                     
-                    For each narrative:
-                    1. Provide a short, catchy title.
-                    2. Provide a one-sentence summary of the trend.
+                    Format each narrative cleanly using markdown:
+                    ## 1. [Catchy Trend Title]
+                    - [One to two concise sentences summarizing the trend and why it matters]
                     
-                    Format the output with bold headers and bullet points.
                     Output the entire response in ${preferredLanguage.value}.
 
                     Headlines:
@@ -697,14 +765,25 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     [[/DATA]]
                 """.trimIndent()
 
-                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
-                _trendingTopics.value = response.text
+                val text = aiRepository.cachedOrFetch(
+                    cacheKey = AiCacheKeys.trends(
+                        currentArticles.take(15).map { it.url },
+                        preferredLanguage.value
+                    ),
+                    feature = AiFeature.TRENDS
+                ) {
+                    withTimeout(90_000) { generativeModel.generateContent(prompt) }.text
+                        ?: throw IllegalStateException("Empty trends response")
+                }
+                _trendingTopics.value = AiResult.Success(text)
             } catch (e: TimeoutCancellationException) {
-                _trendingTopics.value = "The AI request timed out. Please try again."
+                _trendingTopics.value = AiResult.Failure(AiError.Timeout)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: AiRequestException) {
+                _trendingTopics.value = AiResult.Failure(e.error)
             } catch (e: Exception) {
-                _trendingTopics.value = "Failed to analyze trends: ${e.localizedMessage}"
+                _trendingTopics.value = AiResult.Failure(AiError.Unknown(e.message))
             } finally {
                 _isAnalysingTrends.value = false
             }
@@ -716,16 +795,23 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun generateSmartThemes() {
-        val currentArticles = (_uiState.value as? NewsUiState.Success)?.articles ?: return
-        if (currentArticles.isEmpty()) return
-
         _isAnalysingSmartThemes.value = true
         _smartThemes.value = emptyMap()
         _selectedSmartTheme.value = null
+        _uiState.value = NewsUiState.Loading
 
         analysisJob?.cancel()
         analysisJob = viewModelScope.launch {
             try {
+                var currentArticles = (_uiState.value as? NewsUiState.Success)?.articles ?: emptyList()
+                if (currentArticles.isEmpty()) {
+                    currentArticles = repository.getTopHeadlines("general", 1, countryCode.value)
+                }
+                if (currentArticles.isEmpty()) {
+                    _uiState.value = NewsUiState.Error("No articles available to generate themes.")
+                    return@launch
+                }
+
                 val titlesWithIndex = currentArticles.take(20).mapIndexed { index, article -> "$index: ${article.title}" }.joinToString("\n")
                 val prompt = """
                     $PROMPT_INJECTION_GUARD
@@ -744,8 +830,12 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     [[/DATA]]
                 """.trimIndent()
 
-                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
-                val responseText = response.text ?: ""
+                val responseText = aiRepository.cachedOrFetch(
+                    cacheKey = AiCacheKeys.themes(currentArticles.take(20).map { it.url }),
+                    feature = AiFeature.THEMES
+                ) {
+                    withTimeout(90_000) { generativeModel.generateContent(prompt) }.text ?: ""
+                }
 
                 val parseResult = parseSmartThemesResponse(responseText, currentArticles)
                 val newThemes = parseResult.themes
@@ -757,13 +847,15 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _uiState.value = NewsUiState.Error("Gemini couldn't identify specific themes for today's news.")
                 }
-                
+
             } catch (e: TimeoutCancellationException) {
-                _uiState.value = NewsUiState.Error("AI request timed out. Please try again.")
+                _uiState.value = NewsUiState.Error(AiError.Timeout.friendlyMessage())
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: AiRequestException) {
+                _uiState.value = NewsUiState.Error(e.error.friendlyMessage())
             } catch (e: Exception) {
-                _uiState.value = NewsUiState.Error("Smart Categorization failed: ${e.localizedMessage}")
+                _uiState.value = NewsUiState.Error(AiError.Unknown(e.message).friendlyMessage())
             } finally {
                 _isAnalysingSmartThemes.value = false
             }
@@ -802,8 +894,12 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     [[/DATA]]
                 """.trimIndent()
 
-                val response = withTimeout(90_000) { generativeModel.generateContent(prompt) }
-                val responseText = response.text ?: ""
+                val responseText = aiRepository.cachedOrFetch(
+                    cacheKey = AiCacheKeys.locations(currentArticles.take(15).map { it.url }),
+                    feature = AiFeature.LOCATIONS
+                ) {
+                    withTimeout(90_000) { generativeModel.generateContent(prompt) }.text ?: ""
+                }
 
                 val parseResult = parseLocationsResponse(responseText)
                 _newsLocations.value = parseResult.locations
@@ -812,11 +908,13 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     _errorEvents.emit("Gemini's location response couldn't be mapped.")
                 }
             } catch (e: TimeoutCancellationException) {
-                _errorEvents.emit("Mapping timed out. Please try again.")
+                _errorEvents.emit(AiError.Timeout.friendlyMessage())
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: AiRequestException) {
+                _errorEvents.emit(e.error.friendlyMessage())
             } catch (e: Exception) {
-                _errorEvents.emit("Mapping failed: ${e.localizedMessage}")
+                _errorEvents.emit(AiError.Unknown(e.message).friendlyMessage())
             } finally {
                 _isAnalysingLocations.value = false
             }
@@ -838,11 +936,13 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
-                if (_chatMessages.value.size == 1) {
-                    // First message, provide context of current headlines
+                // The headline briefing is merged into the first user turn: one
+                // Gemini request instead of two (briefing + query) per session.
+                val isFirstMessage = _chatMessages.value.size == 1
+                val messageToSend = if (isFirstMessage) {
                     val currentArticles = (_uiState.value as? NewsUiState.Success)?.articles ?: emptyList()
                     val context = currentArticles.take(15).joinToString("\n") { "- ${it.title}" }
-                    val initialPrompt = """
+                    """
                         $PROMPT_INJECTION_GUARD
 
                         You are a news expert. Here are the current top headlines:
@@ -850,18 +950,29 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                         [[DATA]]
                         $context
                         [[/DATA]]
-                        
-                        I will now ask you questions about these news or general news topics. 
+
+                        Use this context where relevant when answering the user's question below.
                         Respond in ${preferredLanguage.value}.
+
+                        User question: $query
                     """.trimIndent()
-                    chatSession.sendMessage(initialPrompt)
+                } else {
+                    query
                 }
 
-                val response = chatSession.sendMessage(query)
-                val aiMessage = ChatMessage(response.text ?: "I couldn't process that.", false)
-                _chatMessages.value += aiMessage
+                val responseText = aiRepository.recordUncachedRequest(AiFeature.CHAT) {
+                    withTimeout(90_000) { chatSession.sendMessage(messageToSend) }.text
+                        ?: "I couldn't process that."
+                }
+                _chatMessages.value += ChatMessage(responseText, false)
+            } catch (e: TimeoutCancellationException) {
+                _chatMessages.value += ChatMessage(AiError.Timeout.friendlyMessage(), false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AiRequestException) {
+                _chatMessages.value += ChatMessage(e.error.friendlyMessage(), false)
             } catch (e: Exception) {
-                _chatMessages.value += ChatMessage("Error: ${e.localizedMessage}", false)
+                _chatMessages.value += ChatMessage(AiError.Unknown(e.message).friendlyMessage(), false)
             } finally {
                 _isChatting.value = false
             }

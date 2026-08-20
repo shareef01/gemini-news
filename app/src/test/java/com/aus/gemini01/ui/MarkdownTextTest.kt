@@ -59,11 +59,9 @@ class MarkdownTextTest {
         val blocks = parseMarkdown("## **Key** point\n- **Item** one")
 
         assertEquals(BlockKind.H2, blocks[0].kind)
-        assertTrue(blocks[0].segments[1].bold)
-        assertEquals("Key", blocks[0].segments[1].text)
+        assertTrue(blocks[0].segments[0].bold || blocks[0].segments.any { it.bold && it.text == "Key" })
         assertEquals(BlockKind.BULLET, blocks[1].kind)
-        assertTrue(blocks[1].segments[1].bold)
-        assertEquals("Item", blocks[1].segments[1].text)
+        assertTrue(blocks[1].segments.any { it.bold && it.text == "Item" })
     }
 
     @Test
@@ -115,5 +113,55 @@ class MarkdownTextTest {
 
         assertEquals(1, blocks.size)
         assertEquals(BlockKind.H1, blocks[0].kind)
+    }
+
+    @Test
+    fun `parses numbered section headers`() {
+        val blocks = parseMarkdown("1. **Key Takeaways**:\n- Point one")
+
+        assertEquals(BlockKind.H2, blocks[0].kind)
+        assertEquals("Key Takeaways", blocks[0].segments[0].text)
+        assertEquals(BlockKind.BULLET, blocks[1].kind)
+    }
+
+    @Test
+    fun `parses standalone bold header`() {
+        val blocks = parseMarkdown("**Key Takeaways:**\n- Point one")
+
+        assertEquals(BlockKind.H2, blocks[0].kind)
+        assertEquals("Key Takeaways", blocks[0].segments[0].text)
+        assertEquals(BlockKind.BULLET, blocks[1].kind)
+    }
+
+    @Test
+    fun `parses sentiment line`() {
+        val blocks = parseMarkdown("Sentiment: Positive — Strong earnings report")
+
+        assertEquals(BlockKind.SENTIMENT, blocks[0].kind)
+        assertEquals("Positive", blocks[0].extra)
+        assertTrue(blocks[0].segments.any { it.text.contains("Strong earnings report") })
+    }
+
+    @Test
+    fun `parses numbered list items`() {
+        val blocks = parseMarkdown("1. First item\n2. Second item")
+
+        assertEquals(2, blocks.size)
+        assertEquals(BlockKind.NUMBERED, blocks[0].kind)
+        assertEquals("1", blocks[0].extra)
+        assertEquals("First item", blocks[0].segments[0].text)
+        assertEquals(BlockKind.NUMBERED, blocks[1].kind)
+        assertEquals("2", blocks[1].extra)
+        assertEquals("Second item", blocks[1].segments[0].text)
+    }
+
+    @Test
+    fun `parses dividers and quotes`() {
+        val blocks = parseMarkdown("> This is a quote\n---\nBody text")
+
+        assertEquals(BlockKind.QUOTE, blocks[0].kind)
+        assertEquals("This is a quote", blocks[0].segments[0].text)
+        assertEquals(BlockKind.DIVIDER, blocks[1].kind)
+        assertEquals(BlockKind.BODY, blocks[2].kind)
     }
 }

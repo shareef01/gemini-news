@@ -9,18 +9,112 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.aus.gemini01.data.ai.AiResult
+import com.aus.gemini01.data.ai.friendlyMessage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadingModeScreen(
+    result: AiResult,
+    isSpeaking: Boolean,
+    onBack: () -> Unit,
+    onOpenInWeb: () -> Unit,
+    onRetry: () -> Unit = {},
+    onToggleReadAloud: () -> Unit
+) {
+    when (result) {
+        is AiResult.Success -> {
+            ReadingModeContent(
+                content = result.text,
+                isSpeaking = isSpeaking,
+                onBack = onBack,
+                onOpenInWeb = onOpenInWeb,
+                onToggleReadAloud = onToggleReadAloud
+            )
+        }
+        is AiResult.Failure -> {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text("Reader View") },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = onOpenInWeb) {
+                                Icon(Icons.Default.Public, contentDescription = "Open in Web")
+                            }
+                        }
+                    )
+                }
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .padding(innerPadding)
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.WarningAmber,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Could not load Reader View",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = result.error.friendlyMessage(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = onOpenInWeb) {
+                                Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Open in Web")
+                            }
+                            Button(onClick = onRetry) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Try Again")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReadingModeContent(
     content: String,
     isSpeaking: Boolean,
     onBack: () -> Unit,
