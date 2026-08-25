@@ -15,9 +15,6 @@ interface NewsDao {
     @Delete
     suspend fun deleteBookmark(article: ArticleEntity)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM articles WHERE url = :url)")
-    fun isBookmarked(url: String): Flow<Boolean>
-
     // Caching Methods
     @Query("SELECT * FROM cached_articles WHERE category = :category")
     suspend fun getCachedArticles(category: String): List<CachedArticleEntity>

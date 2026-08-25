@@ -19,7 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.ui.components.ShimmerList
+import com.aus.gemini01.ui.theme.Dimens
 import kotlinx.coroutines.flow.Flow
 import java.time.Duration
 import java.time.Instant
@@ -58,6 +59,9 @@ fun NewsListContent(
     val smartThemes by viewModel.smartThemes.collectAsState()
     val selectedSmartTheme by viewModel.selectedSmartTheme.collectAsState()
     val countryCode by viewModel.countryCode.collectAsState()
+    // One Room observer for the whole list instead of one per card.
+    val bookmarks by viewModel.bookmarks.collectAsState()
+    val bookmarkedUrls = remember(bookmarks) { bookmarks.map { it.url }.toSet() }
 
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -244,9 +248,9 @@ fun NewsListContent(
                                 NewsList(
                                     articles = state.articles,
                                     isLoadingMore = isLoadingMore,
+                                    bookmarkedUrls = bookmarkedUrls,
                                     onSummarize = { article -> viewModel.summarizeArticle(article) },
                                     onBookmarkToggle = { article -> viewModel.toggleBookmark(article) },
-                                    isBookmarked = { url -> viewModel.isBookmarked(url) },
                                     onLoadMore = { viewModel.loadNextPage() },
                                     onReadMore = { article ->
                                         viewModel.addToHistory(article)
@@ -268,75 +272,69 @@ fun NewsListContent(
 
 @Composable
 fun AIProgressOverlay(message: String, onCancel: (() -> Unit)? = null) {
-    val infiniteTransition = rememberInfiniteTransition(label = "aiAura")
-    
-    val pulse1 by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse1"
-    )
-    
-    val pulse2 by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.8f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearOutSlowInEasing, delayMillis = 500),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse2"
-    )
-
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+    // Non-blocking status pill docked to the bottom of the screen. The feed
+    // stays visible and scrollable while Gemini works - one status line that
+    // reflects the real single in-flight request (no fake multi-stage copy).
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(Dimens.spaceXL),
+        contentAlignment = Alignment.BottomCenter
     ) {
-        Column(
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                // Layered pulsing auras
-                Surface(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .scale(pulse2),
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                ) {}
-                Surface(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .scale(pulse1),
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                ) {}
-                
-                Icon(
-                    imageVector = Icons.Default.AutoAwesome,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            Spacer(modifier = Modifier.height(32.dp))
-            Text(
-                text = message,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+        Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(Dimens.radiusXL),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp,
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
             )
-            if (onCancel != null) {
-                Spacer(modifier = Modifier.height(16.dp))
-                TextButton(onClick = onCancel) {
-                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = Dimens.spaceL, vertical = Dimens.spaceM),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.spaceM)
+            ) {
+                AIOrb()
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (onCancel != null) {
+                    TextButton(onClick = onCancel, contentPadding = PaddingValues(Dimens.spaceS)) {
+                        Text("Cancel")
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun AIOrb() {
+    val transition = rememberInfiniteTransition(label = "aiOrb")
+    val pulse by transition.animateFloat(
+        initialValue = 0.7f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "orbPulse"
+    )
+    Icon(
+        imageVector = Icons.Default.AutoAwesome,
+        contentDescription = null,
+        modifier = Modifier
+            .size(Dimens.iconSizeM)
+            .scale(pulse),
+        tint = MaterialTheme.colorScheme.primary
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -360,7 +358,7 @@ fun CategoryChips(
                 else -> category.replaceFirstChar { it.uppercase() }
             }
             val icon = when(category) {
-                "general" -> Icons.AutoMirrored.Filled.TrendingUp
+                "general" -> Icons.Default.TrendingUp
                 "smart" -> Icons.Default.AutoAwesome
                 "for_you" -> Icons.Default.Insights
                 "business" -> Icons.Default.BusinessCenter
@@ -389,9 +387,9 @@ fun CategoryChips(
 fun NewsList(
     articles: List<Article>,
     isLoadingMore: Boolean,
+    bookmarkedUrls: Set<String>,
     onSummarize: (Article) -> Unit,
     onBookmarkToggle: (Article) -> Unit,
-    isBookmarked: (String) -> Flow<Boolean>,
     onLoadMore: () -> Unit,
     onReadMore: (Article) -> Unit,
     onReadingMode: (Article) -> Unit
@@ -419,8 +417,8 @@ fun NewsList(
                     article = article,
                     onSummarize = { onSummarize(article) },
                     onBookmarkToggle = { onBookmarkToggle(article) },
-                    isBookmarkedFlow = isBookmarked(article.url),
-                    onReadMore = { 
+                    isBookmarked = article.url in bookmarkedUrls,
+                    onReadMore = {
                         onReadMore(article)
                     },
                     onReadingMode = {
@@ -450,12 +448,11 @@ fun ArticleCard(
     article: Article,
     onSummarize: () -> Unit,
     onBookmarkToggle: () -> Unit,
-    isBookmarkedFlow: Flow<Boolean>,
+    isBookmarked: Boolean,
     onReadMore: () -> Unit,
     onReadingMode: () -> Unit
 ) {
     val context = LocalContext.current
-    val isBookmarked by isBookmarkedFlow.collectAsState(initial = false)
 
     ElevatedCard(
         onClick = onReadingMode,
@@ -467,36 +464,34 @@ fun ArticleCard(
             Column {
                 // Image area: branded placeholder shows while loading, when the
                 // image fails, or when the article has no image at all.
-                Box {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .background(
-                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                        MaterialTheme.colorScheme.secondaryContainer
-                                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(Dimens.articleImageAspectRatio)
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.secondaryContainer
                                 )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Default.Public,
-                                contentDescription = null,
-                                modifier = Modifier.size(36.dp),
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = article.source.name,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.Public,
+                            contentDescription = null,
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        )
+                        Spacer(modifier = Modifier.height(Dimens.spaceS))
+                        Text(
+                            text = article.source.name,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
 
                     safeImageUrl(article.urlToImage)?.let { imageUrl ->
@@ -505,7 +500,7 @@ fun ArticleCard(
                             contentDescription = null,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(220.dp),
+                                .aspectRatio(Dimens.articleImageAspectRatio),
                             contentScale = ContentScale.Crop
                         )
                     }
@@ -514,7 +509,7 @@ fun ArticleCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(72.dp)
+                            .height(64.dp)
                             .background(
                                 brush = androidx.compose.ui.graphics.Brush.verticalGradient(
                                     colors = listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent)
@@ -522,56 +517,78 @@ fun ArticleCard(
                             )
                     )
                 }
-                Column(modifier = Modifier.padding(20.dp)) {
+
+                Column(modifier = Modifier.padding(Dimens.spaceL)) {
+                    // Editorial meta line: SOURCE · time — quiet, above the headline
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = article.source.name.uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        val timeAgo = formatTimeAgo(article.publishedAt)
+                        if (timeAgo.isNotEmpty()) {
+                            Text(
+                                text = "  ·  $timeAgo",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(Dimens.spaceS))
+
+                    // The headline is the primary object of the card
                     Text(
                         text = article.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        maxLines = 2,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text(
-                                text = article.source.name,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-                        val timeAgo = formatTimeAgo(article.publishedAt)
-                        if (timeAgo.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "•  $timeAgo",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+
                     article.description?.let {
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(Dimens.spaceS))
                         Text(
                             text = it,
                             style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 3,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Spacer(modifier = Modifier.height(Dimens.spaceM))
+
+                    // One primary action; everything else stays quiet
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        FilledTonalButton(
+                            onClick = onReadingMode,
+                            shape = MaterialTheme.shapes.large,
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(Dimens.spaceS))
+                            Text("Read", style = MaterialTheme.typography.labelLarge)
+                        }
+
                         Row {
                             TextButton(
                                 onClick = onReadMore,
-                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                contentPadding = PaddingValues(horizontal = Dimens.spaceS)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Public,
@@ -579,12 +596,12 @@ fun ArticleCard(
                                     modifier = Modifier.size(15.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(Dimens.spaceXS))
                                 Text("Web", style = MaterialTheme.typography.labelMedium)
                             }
                             TextButton(
-                                onClick = onReadingMode,
-                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                onClick = onSummarize,
+                                contentPadding = PaddingValues(horizontal = Dimens.spaceS)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.AutoAwesome,
@@ -592,24 +609,9 @@ fun ArticleCard(
                                     modifier = Modifier.size(15.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Reader", style = MaterialTheme.typography.labelMedium)
+                                Spacer(modifier = Modifier.width(Dimens.spaceXS))
+                                Text("Summarize", style = MaterialTheme.typography.labelMedium)
                             }
-                        }
-
-                        FilledTonalButton(
-                            onClick = onSummarize,
-                            shape = MaterialTheme.shapes.large,
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                modifier = Modifier.size(15.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Summarize", maxLines = 1, style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }

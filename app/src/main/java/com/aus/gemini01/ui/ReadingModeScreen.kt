@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.aus.gemini01.data.ai.AiResult
 import com.aus.gemini01.data.ai.friendlyMessage
+import com.aus.gemini01.ui.theme.Dimens
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -177,32 +178,40 @@ private fun ReadingModeContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 24.dp, vertical = 32.dp)
+                    .verticalScroll(scrollState),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                MarkdownText(
-                    text = content,
-                    fontScale = fontSizeMultiplier,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(80.dp))
-                
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                // Reading measure: content column never exceeds a comfortable
+                // line length, on phone or on the tablet two-pane detail pane.
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = Dimens.readingMeasureMax)
+                        .padding(horizontal = Dimens.gutterReading, vertical = Dimens.spaceXXL)
                 ) {
-                    Text(
-                        text = "Formatted by Gemini AI",
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    MarkdownText(
+                        text = content,
+                        fontScale = fontSizeMultiplier,
+                        modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(Dimens.spaceXXL))
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) {
+                        Text(
+                            text = "Formatted by Gemini AI",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = Dimens.spaceM, vertical = 6.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(Dimens.spaceXXL))
                 }
-                Spacer(modifier = Modifier.height(32.dp))
             }
-            
+
             LinearProgressIndicator(
                 progress = { progress },
                 modifier = Modifier

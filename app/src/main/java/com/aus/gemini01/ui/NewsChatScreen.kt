@@ -5,12 +5,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -89,23 +92,110 @@ fun NewsChatScreen(
         }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(messages) { message ->
-                    ChatBubble(message)
+            if (messages.isEmpty()) {
+                // First-run state: tell the user what this screen can do
+                // instead of showing an empty void.
+                ChatEmptyState(onPromptSelected = { onSendMessage(it) })
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(messages) { message ->
+                        ChatBubble(message)
+                    }
+
+                    if (isTyping) {
+                        item {
+                            Text(
+                                "Gemini is thinking...",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(start = 8.dp),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
-                
-                if (isTyping) {
-                    item {
+            }
+        }
+    }
+}
+
+private val suggestedPrompts = listOf(
+    "What's the biggest story today?",
+    "Why is this important?",
+    "Compare the top stories about AI",
+    "What are the main arguments on this issue?",
+    "Explain this story simply"
+)
+
+@Composable
+private fun ChatEmptyState(onPromptSelected: (String) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            modifier = Modifier.size(72.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Icon(
+                Icons.Default.AutoAwesome,
+                contentDescription = null,
+                modifier = Modifier.padding(18.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            "News Expert",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Ask me about today's stories.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(28.dp))
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            suggestedPrompts.forEach { prompt ->
+                Surface(
+                    onClick = { onPromptSelected(prompt) },
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.ChatBubbleOutline,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                         Text(
-                            "Gemini is thinking...",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(start = 8.dp),
-                            color = MaterialTheme.colorScheme.primary
+                            prompt,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }

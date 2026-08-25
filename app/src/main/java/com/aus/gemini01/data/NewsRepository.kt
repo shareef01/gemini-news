@@ -125,10 +125,6 @@ class NewsRepository(private val newsDao: NewsDao) {
         newsDao.deleteBookmark(article.toEntity())
     }
 
-    fun isBookmarked(url: String): Flow<Boolean> {
-        return newsDao.isBookmarked(url)
-    }
-
     // History Methods
     fun getAllHistory(): Flow<List<Article>> {
         return newsDao.getAllHistory().map { entities ->

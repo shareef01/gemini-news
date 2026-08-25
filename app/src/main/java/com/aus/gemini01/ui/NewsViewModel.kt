@@ -211,6 +211,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     val history: StateFlow<List<Article>> = repository.getAllHistory()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Live AI usage counters for the Settings diagnostics card. */
+    val aiDiagnostics = aiRepository.diagnostics
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     init {
         // Observe country changes and refresh news
         viewModelScope.launch {
@@ -489,10 +493,6 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.addToHistory(article)
         }
-    }
-
-    fun isBookmarked(url: String): Flow<Boolean> {
-        return repository.isBookmarked(url)
     }
 
     fun setCountryCode(code: String) {

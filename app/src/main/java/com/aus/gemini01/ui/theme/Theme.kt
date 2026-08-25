@@ -64,8 +64,10 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun Gemini01Theme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available since API 31, which is this app's minSdk.
-    dynamicColor: Boolean = true,
+    // Dynamic color replaces the editorial brand palette with wallpaper-derived
+    // colors, which makes the app read as generic Material. Off by default so
+    // the curated navy/vermilion identity actually applies; opt in if wanted.
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {

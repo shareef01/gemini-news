@@ -1,0 +1,59 @@
+package com.aus.gemini01.data.ai
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class AiCacheKeysTest {
+
+    @Test
+    fun `same article and language produce same key`() {
+        assertEquals(
+            AiCacheKeys.summary("https://x.com/a", "English"),
+            AiCacheKeys.summary("https://x.com/a", "English")
+        )
+    }
+
+    @Test
+    fun `different language produces different key`() {
+        assertNotEquals(
+            AiCacheKeys.summary("https://x.com/a", "English"),
+            AiCacheKeys.summary("https://x.com/a", "French")
+        )
+    }
+
+    @Test
+    fun `different article produces different key`() {
+        assertNotEquals(
+            AiCacheKeys.summary("https://x.com/a", "English"),
+            AiCacheKeys.summary("https://x.com/b", "English")
+        )
+    }
+
+    @Test
+    fun `summary and reader keys never collide for same article`() {
+        assertNotEquals(
+            AiCacheKeys.summary("https://x.com/a", "English"),
+            AiCacheKeys.reader("https://x.com/a", "English")
+        )
+    }
+
+    @Test
+    fun `article list order matters for feed features`() {
+        val a = listOf("u1", "u2")
+        val b = listOf("u2", "u1")
+        assertNotEquals(AiCacheKeys.trends(a, "English"), AiCacheKeys.trends(b, "English"))
+    }
+
+    @Test
+    fun `keys are opaque hex digests, no payload leaks into key`() {
+        val key = AiCacheKeys.summary("https://secret-url.com/article?token=abc", "English")
+        assertTrue(key.matches(Regex("[0-9a-f]{64}")))
+    }
+
+    @Test
+    fun `model constant matches configured model`() {
+        assertEquals("gemini-flash-latest", GEMINI_MODEL)
+    }
+}

@@ -70,7 +70,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SettingsSection(
-                title = "News Region",
+                title = "News",
                 icon = Icons.Default.Public
             ) {
                 Box {
@@ -79,6 +79,7 @@ fun SettingsScreen(
                         onValueChange = {},
                         readOnly = true,
                         modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Region") },
                         trailingIcon = {
                             Icon(
                                 Icons.Default.ArrowDropDown,
@@ -103,18 +104,16 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
 
-            SettingsSection(
-                title = "Preferred Language (AI)",
-                icon = Icons.Default.Translate
-            ) {
+                Spacer(modifier = Modifier.height(12.dp))
+
                 Box {
                     OutlinedTextField(
                         value = preferredLanguage,
                         onValueChange = {},
                         readOnly = true,
                         modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Language for AI features") },
                         trailingIcon = {
                             Icon(
                                 Icons.Default.ArrowDropDown,
@@ -138,6 +137,34 @@ fun SettingsScreen(
                             )
                         }
                     }
+                }
+            }
+
+            SettingsSection(
+                title = "AI Services",
+                icon = Icons.Default.AutoAwesome
+            ) {
+                AiDiagnosticsCard(viewModel)
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Free-tier budget", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Pause background AI & news refreshes",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = newsApiFreeTier,
+                        onCheckedChange = { viewModel.setNewsApiFreeTier(it) }
+                    )
                 }
             }
 
@@ -195,37 +222,16 @@ fun SettingsScreen(
             }
 
             SettingsSection(
-                title = "Data Management",
+                title = "Data",
                 icon = Icons.Default.Storage
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("NewsAPI free tier", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "Limit background refreshes (100 requests/day)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = newsApiFreeTier,
-                        onCheckedChange = { viewModel.setNewsApiFreeTier(it) }
-                    )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-
                 OutlinedButton(
                     onClick = { viewModel.clearCache() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Clear News Cache")
+                    Text("Clear News & AI Cache")
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -270,6 +276,62 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun AiDiagnosticsCard(viewModel: NewsViewModel) {
+    val diagnostics by viewModel.aiDiagnostics.collectAsState()
+    val d = diagnostics
+
+    if (d == null) {
+        Text(
+            "AI usage stats load on first request.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
+
+    val totalRequests = d.requestsByFeature.values.sum()
+    val topFeature = d.requestsByFeature.maxByOrNull { it.value }?.key
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "Gemini model: flash (Vertex AI)",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            "Requests today: $totalRequests · Cache hits: ${d.cacheHits} · Misses: ${d.cacheMisses}",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        if (topFeature != null && d.requestsByFeature[topFeature]!! > 0) {
+            Text(
+                "Most usage: ${topFeature.replace('_', ' ')}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        if (d.errorsByType["quota"] != null && d.errorsByType["quota"]!! > 0) {
+            Text(
+                "Quota errors today: ${d.errorsByType["quota"]}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+        d.lastRequestAt?.let { last ->
+            val minutesAgo = (System.currentTimeMillis() - last) / 60000
+            val lastText = when {
+                minutesAgo < 1 -> "just now"
+                minutesAgo < 60 -> "$minutesAgo min ago"
+                else -> "${minutesAgo / 60}h ago"
+            }
+            Text(
+                "Last request: $lastText",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
