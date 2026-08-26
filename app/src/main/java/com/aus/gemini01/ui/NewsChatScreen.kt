@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -20,11 +22,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aus.gemini01.ui.components.PulseIndicator
+import com.aus.gemini01.ui.theme.Dimens
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -39,6 +44,7 @@ fun NewsChatScreen(
 ) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -46,10 +52,47 @@ fun NewsChatScreen(
         }
     }
 
+    val sendMessage = {
+        if (inputText.isNotBlank() && !isTyping) {
+            onSendMessage(inputText.trim())
+            inputText = ""
+            focusManager.clearFocus()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("News Expert Chat") },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.padding(6.dp).size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "News Expert",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Powered by Gemini AI",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -58,11 +101,14 @@ fun NewsChatScreen(
             )
         },
         bottomBar = {
-            Surface(tonalElevation = 2.dp) {
+            Surface(
+                tonalElevation = 3.dp,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
                 Row(
                     modifier = Modifier
-                        .padding(16.dp)
                         .fillMaxWidth()
+                        .padding(horizontal = Dimens.gutterDefault, vertical = Dimens.spaceM)
                         .navigationBarsPadding()
                         .imePadding(),
                     verticalAlignment = Alignment.CenterVertically
@@ -71,37 +117,50 @@ fun NewsChatScreen(
                         value = inputText,
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask about the news...") },
-                        maxLines = 3,
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
-                        onClick = {
-                            if (inputText.isNotBlank()) {
-                                onSendMessage(inputText)
-                                inputText = ""
-                            }
+                        placeholder = {
+                            Text(
+                                "Ask about world news, trends...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
                         },
-                        enabled = !isTyping && inputText.isNotBlank()
+                        maxLines = 3,
+                        shape = RoundedCornerShape(Dimens.radiusXXL),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { sendMessage() })
+                    )
+                    Spacer(modifier = Modifier.width(Dimens.spaceS))
+                    FilledIconButton(
+                        onClick = sendMessage,
+                        enabled = !isTyping && inputText.isNotBlank(),
+                        shape = CircleShape,
+                        modifier = Modifier.size(Dimens.touchTarget)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.primary)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send message",
+                            modifier = Modifier.size(Dimens.iconSizeS)
+                        )
                     }
                 }
             }
         }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+        ) {
             if (messages.isEmpty()) {
-                // First-run state: tell the user what this screen can do
-                // instead of showing an empty void.
-                ChatEmptyState(onPromptSelected = { onSendMessage(it) })
+                ChatEmptyState(onPromptSelected = { prompt ->
+                    onSendMessage(prompt)
+                })
             } else {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    contentPadding = PaddingValues(horizontal = Dimens.gutterDefault, vertical = Dimens.spaceL),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.spaceL)
                 ) {
                     items(messages) { message ->
                         ChatBubble(message)
@@ -109,12 +168,25 @@ fun NewsChatScreen(
 
                     if (isTyping) {
                         item {
-                            Text(
-                                "Gemini is thinking...",
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(start = 8.dp),
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(Dimens.radiusL),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                modifier = Modifier.padding(start = Dimens.spaceS, top = Dimens.spaceXS)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = Dimens.spaceL, vertical = Dimens.spaceS),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(Dimens.spaceM)
+                                ) {
+                                    PulseIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                    Text(
+                                        "Gemini is analyzing news...",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -124,11 +196,11 @@ fun NewsChatScreen(
 }
 
 private val suggestedPrompts = listOf(
-    "What's the biggest story today?",
-    "Why is this important?",
-    "Compare the top stories about AI",
-    "What are the main arguments on this issue?",
-    "Explain this story simply"
+    "What are the top global stories today?",
+    "Summarize recent breakthroughs in AI and technology",
+    "What are the major business and market developments?",
+    "Explain key global geopolitical events this week",
+    "What are today's top science and climate headlines?"
 )
 
 @Composable
@@ -137,59 +209,68 @@ private fun ChatEmptyState(onPromptSelected: (String) -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 32.dp),
+            .padding(horizontal = Dimens.spaceXL, vertical = Dimens.spaceXXL),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Surface(
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(76.dp),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer
         ) {
             Icon(
                 Icons.Default.AutoAwesome,
                 contentDescription = null,
-                modifier = Modifier.padding(18.dp),
+                modifier = Modifier.padding(20.dp),
                 tint = MaterialTheme.colorScheme.primary
             )
         }
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(Dimens.spaceL))
         Text(
-            "News Expert",
+            "AI News Companion",
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(Dimens.spaceS))
         Text(
-            "Ask me about today's stories.",
+            "Ask questions, compare perspectives, and explore today's headlines with Gemini.",
             style = MaterialTheme.typography.bodyLarge,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(Dimens.spaceXXL))
 
         Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(Dimens.spaceM),
             modifier = Modifier.fillMaxWidth()
         ) {
+            Text(
+                "Suggested questions",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = Dimens.spaceXS)
+            )
             suggestedPrompts.forEach { prompt ->
                 Surface(
                     onClick = { onPromptSelected(prompt) },
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    shape = RoundedCornerShape(Dimens.radiusL),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        modifier = Modifier.padding(horizontal = Dimens.spaceL, vertical = Dimens.spaceM),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.spaceM)
                     ) {
                         Icon(
                             Icons.Default.ChatBubbleOutline,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(Dimens.iconSizeS),
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
@@ -205,9 +286,10 @@ private fun ChatEmptyState(onPromptSelected: (String) -> Unit) {
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage) {    val alignment = if (message.isUser) Alignment.End else Alignment.Start
-    val containerColor = if (message.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-    val textColor = if (message.isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+fun ChatBubble(message: ChatMessage) {
+    val alignment = if (message.isUser) Alignment.End else Alignment.Start
+    val containerColor = if (message.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+    val textColor = if (message.isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -227,47 +309,60 @@ fun ChatBubble(message: ChatMessage) {    val alignment = if (message.isUser) Al
                     tint = MaterialTheme.colorScheme.onPrimary
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Dimens.spaceS))
         }
 
         Column(horizontalAlignment = alignment) {
             Box(
                 modifier = Modifier
-                    .widthIn(max = 280.dp)
+                    .widthIn(max = 480.dp)
                     .clip(
                         RoundedCornerShape(
-                            topStart = 20.dp,
-                            topEnd = 20.dp,
-                            bottomStart = if (message.isUser) 20.dp else 4.dp,
-                            bottomEnd = if (message.isUser) 4.dp else 20.dp
+                            topStart = Dimens.radiusL,
+                            topEnd = Dimens.radiusL,
+                            bottomStart = if (message.isUser) Dimens.radiusL else 4.dp,
+                            bottomEnd = if (message.isUser) 4.dp else Dimens.radiusL
                         )
                     )
                     .background(containerColor)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = Dimens.spaceL, vertical = Dimens.spaceM)
+            ) {
+                if (message.isUser) {
+                    Text(
+                        text = message.text,
+                        color = textColor,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                } else {
+                    MarkdownText(
+                        text = message.text,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp, start = Dimens.spaceS, end = Dimens.spaceS)
             ) {
                 Text(
-                    text = message.text,
-                    color = textColor,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp, lineHeight = 20.sp)
+                    text = if (message.isUser) "You" else "Gemini",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
+                val time = formatMessageTime(message.timestamp)
+                if (time.isNotEmpty()) {
+                    Text(
+                        text = " • $time",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
             }
-            Text(
-                text = if (message.isUser) "You" else "Gemini",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-            Text(
-                text = formatMessageTime(message.timestamp),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 1.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-            )
         }
 
         if (message.isUser) {
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(Dimens.spaceS))
             Surface(
                 modifier = Modifier.size(32.dp),
                 shape = CircleShape,
@@ -293,3 +388,4 @@ private fun formatMessageTime(timestamp: Long): String {
         ""
     }
 }
+

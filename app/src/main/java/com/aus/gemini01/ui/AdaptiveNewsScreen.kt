@@ -97,28 +97,52 @@ fun AdaptiveNewsScreen(
                             TopAppBar(
                                 title = {
                                     Icon(
-                                        Icons.Default.AutoAwesome,
+                                        imageVector = Icons.Default.AutoAwesome,
                                         contentDescription = "Gemini News",
-                                        tint = MaterialTheme.colorScheme.primary
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(26.dp)
                                     )
                                 },
                                 actions = {
                                     IconButton(onClick = { showChat = true }) {
-                                        Icon(Icons.Default.QuestionAnswer, contentDescription = "AI Chat", tint = MaterialTheme.colorScheme.primary)
+                                        Icon(
+                                            Icons.Default.QuestionAnswer,
+                                            contentDescription = "News Expert Chat",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
                                     }
                                     IconButton(onClick = { viewModel.analyzeNewsLocations() }) {
-                                        Icon(Icons.Default.Public, contentDescription = "Map", tint = MaterialTheme.colorScheme.primary)
+                                        Icon(
+                                            Icons.Default.Public,
+                                            contentDescription = "News Map",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                     IconButton(onClick = { viewModel.analyzeTrendingTopics() }) {
-                                        Icon(Icons.Default.LocalFireDepartment, contentDescription = "Trending", tint = MaterialTheme.colorScheme.error)
+                                        Icon(
+                                            Icons.Default.LocalFireDepartment,
+                                            contentDescription = "Trending Topics",
+                                            tint = com.aus.gemini01.ui.theme.TrendingFlame
+                                        )
                                     }
                                     IconButton(onClick = { showSettings = true }) {
-                                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                                        Icon(
+                                            Icons.Default.Settings,
+                                            contentDescription = "Settings",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                     IconButton(onClick = { viewModel.fetchNews() }) {
-                                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                                        Icon(
+                                            Icons.Default.Refresh,
+                                            contentDescription = "Refresh Feed",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
-                                }
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                )
                             )
                         }
                     ) { innerPadding ->
@@ -175,9 +199,7 @@ fun AdaptiveNewsScreen(
                                 }
                             )
                         } else {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
-                            }
+                            com.aus.gemini01.ui.components.ReaderViewShimmer()
                         }
                     } else {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -215,28 +237,28 @@ fun AdaptiveNewsScreen(
                                 }
                                 Spacer(modifier = Modifier.height(24.dp))
                                 Text(
-                                    "Ready for your first story?",
+                                    "Select a story to begin",
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    "Select an article from the list to start reading with Gemini's AI insights.",
+                                    "Tap any news card to read distraction-free or explore AI insights.",
                                     style = MaterialTheme.typography.bodyLarge,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(14.dp))
                                 Surface(
                                     shape = MaterialTheme.shapes.large,
-                                    color = MaterialTheme.colorScheme.tertiaryContainer
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                                 ) {
                                     Text(
-                                        "Tip: tap Summarize ✨ on any card",
+                                        "Tip: tap Summarize ✨ on any story",
                                         style = MaterialTheme.typography.labelMedium,
                                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 }
                             }
@@ -305,7 +327,7 @@ fun AIDialog(
                     }
                 }
 
-                if (isSuccess && result is AiResult.Success) {
+                if (result is AiResult.Success) {
                     IconButton(onClick = {
                         val text = result.text
                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -412,7 +434,8 @@ fun GlobalOverlays(viewModel: NewsViewModel) {
             title = "Gemini Insights",
             icon = Icons.Default.AutoAwesome,
             result = it,
-            onDismiss = { viewModel.clearSummary() }
+            onDismiss = { viewModel.clearSummary() },
+            onRetry = { viewModel.retrySummarize() }
         )
     }
 

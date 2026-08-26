@@ -202,11 +202,19 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
 
     // The long-running AI calls behind the progress overlays.
     private var analysisJob: Job? = null
+    private var lastSummarizedArticle: Article? = null
 
     /** Cancels whatever AI operation is currently blocking the UI with an overlay. */
     fun cancelAnalysis() {
         analysisJob?.cancel()
         fetchJob?.cancel() // "For You" analysis runs inside fetchJob
+        _isSummarizing.value = false
+        _isAnalysingInterests.value = false
+        _isAnalysingStats.value = false
+        _isAnalysingTrends.value = false
+        _isAnalysingSmartThemes.value = false
+        _isAnalysingLocations.value = false
+        _isListening.value = false
     }
 
     val bookmarks: StateFlow<List<Article>> = repository.getAllBookmarks()
@@ -561,6 +569,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun summarizeArticle(article: Article) {
+        lastSummarizedArticle = article
         _isSummarizing.value = true
         _summaryState.value = null
 
@@ -613,6 +622,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 _isSummarizing.value = false
             }
         }
+    }
+
+    fun retrySummarize() {
+        lastSummarizedArticle?.let { summarizeArticle(it) }
     }
 
     fun clearSummary() {
