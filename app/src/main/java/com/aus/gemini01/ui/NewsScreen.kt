@@ -59,6 +59,7 @@ fun NewsListContent(
     val smartThemes by viewModel.smartThemes.collectAsState()
     val selectedSmartTheme by viewModel.selectedSmartTheme.collectAsState()
     val countryCode by viewModel.countryCode.collectAsState()
+    val isServingCached by viewModel.isServingCached.collectAsState()
     // One Room observer for the whole list instead of one per card.
     val bookmarks by viewModel.bookmarks.collectAsState()
     val bookmarkedUrls = remember(bookmarks) { bookmarks.map { it.url }.toSet() }
@@ -188,6 +189,46 @@ fun NewsListContent(
                     Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Generate AI Reading Stats ✨")
+                }
+            }
+        }
+
+        // Degraded-mode banner: the network failed and Room is serving the last
+        // successful fetch. Honest, dismissable-by-success, offers retry.
+        if (isServingCached && selectedCategory !in setOf("bookmarks", "history")) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 2.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            Icons.Default.CloudOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            "Offline — showing saved stories",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(
+                        onClick = { viewModel.fetchNews() },
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text("Retry")
+                    }
                 }
             }
         }

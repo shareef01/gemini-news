@@ -139,6 +139,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    /** True when the network failed and the feed is showing Room-cached stories. */
+    private val _isServingCached = MutableStateFlow(false)
+    val isServingCached: StateFlow<Boolean> = _isServingCached.asStateFlow()
+
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
 
@@ -314,14 +318,15 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         fetchJob?.cancel()
         fetchJob = viewModelScope.launch {
             try {
-                val articles = repository.getTopHeadlines(category, currentPage, countryCode.value)
+                val result = repository.getTopHeadlines(category, currentPage, countryCode.value)
                 // Cancellation should already have prevented landing here, but guard
                 // anyway in case a sibling job slipped through.
                 if (_searchQuery.value.isNotEmpty() || _selectedCategory.value != category) {
                     return@launch
                 }
-                _uiState.value = NewsUiState.Success(articles)
-                if (articles.isEmpty()) isLastPage = true
+                _isServingCached.value = result.fromCache
+                _uiState.value = NewsUiState.Success(result.articles)
+                if (result.articles.isEmpty()) isLastPage = true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -455,7 +460,9 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 } else if (categoryAtStart == "for_you") {
                     repository.searchNews(forYouKeywords, pageToLoad)
                 } else {
-                    repository.getTopHeadlines(categoryAtStart, pageToLoad, countryCode.value)
+                    // Pagination beyond page 1 never falls back to cache
+                    // (page > 1 throws), so this is always a fresh list.
+                    repository.getTopHeadlines(categoryAtStart, pageToLoad, countryCode.value).articles
                 }
 
                 // The user navigated away while this page was loading - discard it.
@@ -805,7 +812,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 var currentArticles = (_uiState.value as? NewsUiState.Success)?.articles ?: emptyList()
                 if (currentArticles.isEmpty()) {
-                    currentArticles = repository.getTopHeadlines("general", 1, countryCode.value)
+                    currentArticles = repository.getTopHeadlines("general", 1, countryCode.value).articles
                 }
                 if (currentArticles.isEmpty()) {
                     _uiState.value = NewsUiState.Error("No articles available to generate themes.")

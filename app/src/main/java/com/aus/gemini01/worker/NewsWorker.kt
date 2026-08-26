@@ -29,13 +29,13 @@ class NewsWorker(
             }
             // Don't surface cached articles as "breaking news" - that would notify
             // users about stale stories when the network is unreachable.
-            val articles = newsRepository.getTopHeadlines(
+            val result = newsRepository.getTopHeadlines(
                 countryCode = countryCode,
                 allowOfflineFallback = false
             )
 
-            if (articles.isNotEmpty()) {
-                val latestArticle = articles[0]
+            if (result.articles.isNotEmpty()) {
+                val latestArticle = result.articles[0]
                 val lastNotifiedUrl = settingsRepository.lastNotifiedUrl.first()
 
                 if (latestArticle.url != lastNotifiedUrl) {

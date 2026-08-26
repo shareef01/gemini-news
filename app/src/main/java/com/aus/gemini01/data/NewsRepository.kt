@@ -19,6 +19,16 @@ import java.io.IOException
 // doesn't accumulate stale news indefinitely.
 private const val CACHE_TTL_DAYS = 7L
 
+/**
+ * Feed payload plus its origin. `fromCache = true` means the network failed and
+ * Room served the last successful fetch, so the UI can tell the user they are
+ * reading saved (possibly stale) stories instead of failing silently.
+ */
+data class FeedResult(
+    val articles: List<Article>,
+    val fromCache: Boolean
+)
+
 class NewsRepository(private val newsDao: NewsDao) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -45,7 +55,7 @@ class NewsRepository(private val newsDao: NewsDao) {
         page: Int = 1,
         countryCode: String = "us",
         allowOfflineFallback: Boolean = true
-    ): List<Article> {
+    ): FeedResult {
         val effectiveCategory = category ?: "general"
 
         return try {
@@ -75,7 +85,7 @@ class NewsRepository(private val newsDao: NewsDao) {
                 newsDao.insertCachedArticles(articles.map { it.toCachedEntity(effectiveCategory) })
             }
 
-            articles
+            FeedResult(articles, fromCache = false)
         } catch (e: CancellationException) {
             // A cancelled request must not fall back to cache - it would let a stale
             // category overwrite the one the user actually navigated to.
@@ -87,7 +97,7 @@ class NewsRepository(private val newsDao: NewsDao) {
             if (page == 1) {
                 val cached = newsDao.getCachedArticles(effectiveCategory)
                 if (cached.isNotEmpty()) {
-                    cached.map { it.toDomain() }
+                    FeedResult(cached.map { it.toDomain() }, fromCache = true)
                 } else {
                     throw e
                 }
