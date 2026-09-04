@@ -36,12 +36,17 @@ to a `-latest` alias for shipped releases.
 
 ## Device smoke (local Pixel)
 
-This Cloud Agent VM has no USB access to a physical phone. On your machine:
+This Cloud Agent VM cannot reach a USB-attached phone, and nested-virt Android
+emulators here often stay `adb offline`. Prefer either:
+
+1. **Your Pixel** (USB debugging authorized):
 
 ```bash
 adb devices
 ./gradlew :app:installDebug
 ./gradlew :app:connectedDebugAndroidTest
 ```
+
+2. **GitHub Actions** `instrumented` job (API 34 emulator + KVM) on this PR.
 
 Instrumented coverage today: package smoke + Room 4→5 migration.
