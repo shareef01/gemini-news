@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 import java.io.IOException
+import retrofit2.HttpException
 
 // Cached articles older than this are pruned on every fresh fetch, so the cache
 // doesn't accumulate stale news indefinitely.
@@ -25,6 +26,15 @@ internal fun shouldReplaceFeedCache(
     category: String?,
     articleCount: Int
 ): Boolean = page == 1 && category != "bookmarks" && articleCount > 0
+
+/**
+ * HTTP 4xx (including 429) must not be disguised as an offline-cache hit —
+ * that misleads users and hides quota pressure.
+ */
+internal fun shouldOfflineFallbackOnError(error: Throwable): Boolean {
+    val http = error as? HttpException ?: return true
+    return http.code() !in 400..499
+}
 
 /**
  * Feed payload plus its origin. `fromCache = true` means the network failed and
@@ -100,8 +110,8 @@ class NewsRepository(private val newsDao: NewsDao) {
             // category overwrite the one the user actually navigated to.
             throw e
         } catch (e: Exception) {
-            if (!allowOfflineFallback) throw e
-            // Offline fallback: serve the cached feed. If there is nothing cached,
+            if (!allowOfflineFallback || !shouldOfflineFallbackOnError(e)) throw e
+            // Offline / 5xx fallback: serve the cached feed. If there is nothing cached,
             // surface the real error instead of fabricating articles.
             if (page == 1) {
                 val cached = newsDao.getCachedArticles(effectiveCategory)

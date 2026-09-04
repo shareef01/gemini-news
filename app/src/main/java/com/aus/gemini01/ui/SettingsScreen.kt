@@ -50,6 +50,12 @@ fun SettingsScreen(
         if (granted) viewModel.setNotificationsEnabled(true)
     }
 
+    val reminderPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.setRemindersEnabled(true)
+    }
+
     var countryExpanded by remember { mutableStateOf(false) }
     var languageExpanded by remember { mutableStateOf(false) }
 
@@ -206,7 +212,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            "Pauses background polling to conserve API quotas",
+                            "Pauses background breaking-news polling to conserve NewsAPI quota. Turning this on disables breaking alerts.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -235,7 +241,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            "Top headline notifications when news breaks",
+                            "Top headline notifications when news breaks. Enables background NewsAPI polling (turns off free-tier saver).",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -278,7 +284,15 @@ fun SettingsScreen(
                     }
                     Switch(
                         checked = remindersEnabled,
-                        onCheckedChange = { viewModel.setRemindersEnabled(it) }
+                        onCheckedChange = { checked ->
+                            if (checked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                reminderPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                viewModel.setRemindersEnabled(checked)
+                            }
+                        }
                     )
                 }
             }
