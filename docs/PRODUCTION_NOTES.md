@@ -1,5 +1,8 @@
 # Production notes (NewsAPI / Maps / Firebase)
 
+**Distribution intent:** personal / portfolio demo — not a consumer-scale Play Store
+product. The hardening below matches that threat model.
+
 ## NewsAPI key model
 
 `NEWS_API_KEY` is read from `local.properties` (or the `NEWS_API_KEY` env var) and
@@ -7,8 +10,8 @@ compiled into `BuildConfig`. That means:
 
 * Git secrecy does **not** protect the key at runtime.
 * Anyone with the APK can extract the key from the binary.
-* For personal demos this may be acceptable with monitoring and rotation.
-* For consumer distribution, prefer a backend proxy with per-user quotas.
+* **Acceptable for personal/portfolio builds** with a rotatable key and an eye on
+  NewsAPI usage. A backend proxy is optional unless you publish widely.
 * An empty `NEWS_API_KEY` fails closed at runtime (`MissingNewsApiKeyException`)
   with a clear Settings-facing message — no bogus NewsAPI call is made.
 * Breaking-news worker does not advance `lastNotifiedUrl` when
@@ -30,3 +33,15 @@ to this Android package (`com.aus.gemini01`) and your signing certificate SHA-1/
 
 Production builds pin `gemini-2.5-flash` (see `GEMINI_MODEL`). Do not switch back
 to a `-latest` alias for shipped releases.
+
+## Device smoke (local Pixel)
+
+This Cloud Agent VM has no USB access to a physical phone. On your machine:
+
+```bash
+adb devices
+./gradlew :app:installDebug
+./gradlew :app:connectedDebugAndroidTest
+```
+
+Instrumented coverage today: package smoke + Room 4→5 migration.
