@@ -1,6 +1,7 @@
 package com.aus.gemini01.data
 
 import retrofit2.HttpException
+import java.io.IOException
 
 /** User-facing copy for NewsAPI / feed failures (keeps HTTP detail out of the UI). */
 fun newsFeedErrorMessage(error: Throwable): String {
@@ -14,4 +15,13 @@ fun newsFeedErrorMessage(error: Throwable): String {
             "Couldn't refresh the news feed (HTTP ${http.code()})."
         else -> error.localizedMessage ?: "Couldn't load news."
     }
+}
+
+/**
+ * For mixed AI+feed flows (For You, Smart Themes): classify NewsAPI / network
+ * failures with [newsFeedErrorMessage] instead of a generic AI snag copy.
+ */
+fun feedOrAiErrorMessage(error: Throwable): String = when (error) {
+    is MissingNewsApiKeyException, is HttpException, is IOException -> newsFeedErrorMessage(error)
+    else -> error.localizedMessage ?: "This AI feature hit a snag. Please try again."
 }

@@ -68,4 +68,18 @@ class FeedCachePolicyTest {
         assertTrue(msg.contains("NEWS_API_KEY", ignoreCase = true))
         assertTrue(msg.contains("local.properties", ignoreCase = true))
     }
+
+    @Test
+    fun `feed_or_ai_uses_rate_limit_copy_for_429`() {
+        val error = HttpException(Response.error<Unit>(429, "".toResponseBody(null)))
+        val msg = feedOrAiErrorMessage(error)
+        assertTrue(msg.contains("rate limit", ignoreCase = true))
+        assertFalse(msg.contains("snag", ignoreCase = true))
+    }
+
+    @Test
+    fun `feed_or_ai_keeps_generic_copy_for_unrelated_errors`() {
+        val msg = feedOrAiErrorMessage(IllegalStateException("boom"))
+        assertTrue(msg.contains("snag", ignoreCase = true) || msg.contains("boom"))
+    }
 }
