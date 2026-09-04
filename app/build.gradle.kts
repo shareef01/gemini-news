@@ -36,8 +36,8 @@ android {
         applicationId = "com.aus.gemini01"
         minSdk = 31
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -77,8 +77,9 @@ android {
         buildConfig = true
     }
 
-    // Exported Room schemas for MigrationTestHelper (androidTest).
-    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 ksp {
@@ -116,6 +117,9 @@ dependencies {
     implementation(libs.androidx.adaptive.navigation)
     ksp(libs.room.compiler)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.room.testing)
+    testImplementation(libs.androidx.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
