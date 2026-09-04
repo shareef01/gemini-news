@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.aus.gemini01.BuildConfig
 import com.aus.gemini01.data.ai.GEMINI_MODEL_LABEL
 import com.aus.gemini01.ui.components.ConfirmationDialog
 import com.aus.gemini01.ui.theme.Dimens
@@ -367,7 +368,7 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Gemini News v1.0.0",
+                        text = "Gemini News v${BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

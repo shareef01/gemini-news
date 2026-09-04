@@ -20,7 +20,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Unit tests
+      - name: Unit tests (includes Robolectric Room 4→5 migration)
         run: ./gradlew testDebugUnitTest --stacktrace
         env:
           NEWS_API_KEY: ci_placeholder_news_key
@@ -58,3 +58,15 @@ jobs:
         env:
           NEWS_API_KEY: ci_placeholder_news_key
           MAPS_API_KEY: ci_placeholder_maps_key
+
+      - name: Assert release APK excludes App Check debug registrar
+        run: |
+          set -euo pipefail
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          TMP=$(mktemp -d)
+          unzip -q "$APK" -d "$TMP"
+          if strings "$TMP"/classes*.dex | grep -q 'FirebaseAppCheckDebugRegistrar'; then
+            echo "ERROR: Debug App Check registrar found in release dex" >&2
+            exit 1
+          fi
+          echo "OK: no FirebaseAppCheckDebugRegistrar in release APK"
