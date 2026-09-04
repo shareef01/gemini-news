@@ -9,6 +9,8 @@ compiled into `BuildConfig`. That means:
 * Anyone with the APK can extract the key from the binary.
 * For personal demos this may be acceptable with monitoring and rotation.
 * For consumer distribution, prefer a backend proxy with per-user quotas.
+* An empty `NEWS_API_KEY` fails closed at runtime (`MissingNewsApiKeyException`)
+  with a clear Settings-facing message — no bogus NewsAPI call is made.
 
 ## Maps API key
 

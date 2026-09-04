@@ -2,75 +2,63 @@ package com.aus.gemini01
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.URI
 import java.net.URISyntaxException
-import java.net.URLDecoder
 
 /**
- * Mirrors MainActivity deep-link host/path parsing without Android framework APIs
- * (so it runs on the JVM unit-test classpath). Hostile / malformed inputs must
- * not throw into the caller.
+ * Exercises the shared [parseNewsDeepLink] helper used by MainActivity.
+ * Hostile / malformed inputs must not throw into the caller.
  */
 class DeepLinkParseTest {
 
-    private fun parseNewsApp(uriString: String): Pair<String?, String?> {
+    private fun parse(uriString: String): NewsDeepLink? {
         val uri = try {
             URI(uriString)
         } catch (_: URISyntaxException) {
-            return null to null
+            return null
         }
-        if (uri.scheme != "newsapp") return null to null
-        val host = uri.host
-        val rawPath = uri.path?.trim('/')?.takeIf { it.isNotEmpty() }
-        val segment = rawPath?.substringAfterLast('/')?.let { last ->
-            try {
-                URLDecoder.decode(last, "UTF-8")
-            } catch (_: IllegalArgumentException) {
-                null
-            }
-        }
-        return host to segment
+        val lastSegment = uri.path
+            ?.trim('/')
+            ?.takeIf { it.isNotEmpty() }
+            ?.substringAfterLast('/')
+        return parseNewsDeepLink(uri.scheme, uri.host, lastSegment)
     }
 
     @Test
     fun `valid category deep link`() {
-        val (host, path) = parseNewsApp("newsapp://category/technology")
-        assertEquals("category", host)
-        assertEquals("technology", path)
+        val link = parse("newsapp://category/technology")
+        assertTrue(link is NewsDeepLink.Category)
+        assertEquals("technology", (link as NewsDeepLink.Category).name)
     }
 
     @Test
     fun `search query is decoded`() {
-        val (host, path) = parseNewsApp("newsapp://search/climate%20change")
-        assertEquals("search", host)
-        assertEquals("climate change", path)
+        val link = parse("newsapp://search/climate%20change")
+        assertTrue(link is NewsDeepLink.Search)
+        assertEquals("climate change", (link as NewsDeepLink.Search).query)
     }
 
     @Test
-    fun `malformed percent encoding yields null query`() {
-        // java.net.URI rejects some bad encodings at parse time; either outcome
-        // (null host or null segment) is acceptable as long as we don't throw.
-        val (host, path) = parseNewsApp("newsapp://search/%ZZ")
-        if (host == null) {
-            assertNull(path)
-        } else {
-            assertEquals("search", host)
-            assertNull(path)
-        }
+    fun `malformed percent encoding yields null`() {
+        // java.net.URI may reject bad encodings at parse time; either outcome
+        // (null link) is acceptable as long as we don't throw.
+        assertNull(parse("newsapp://search/%ZZ"))
     }
 
     @Test
     fun `empty scheme path is harmless`() {
-        val (host, path) = parseNewsApp("newsapp://")
-        assertNull(host)
-        assertNull(path)
+        assertNull(parse("newsapp://"))
     }
 
     @Test
     fun `javascript scheme is ignored`() {
-        val (host, path) = parseNewsApp("javascript:alert(1)")
-        assertNull(host)
-        assertNull(path)
+        assertNull(parse("javascript:alert(1)"))
+    }
+
+    @Test
+    fun `blank search segment is ignored`() {
+        assertNull(parseNewsDeepLink("newsapp", "search", "   "))
     }
 }
