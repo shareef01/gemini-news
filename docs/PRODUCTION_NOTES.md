@@ -11,6 +11,8 @@ compiled into `BuildConfig`. That means:
 * For consumer distribution, prefer a backend proxy with per-user quotas.
 * An empty `NEWS_API_KEY` fails closed at runtime (`MissingNewsApiKeyException`)
   with a clear Settings-facing message — no bogus NewsAPI call is made.
+* Breaking-news worker does not advance `lastNotifiedUrl` when
+  `POST_NOTIFICATIONS` was denied, and fails permanently on a missing API key.
 
 ## Maps API key
 

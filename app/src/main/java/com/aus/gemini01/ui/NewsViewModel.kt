@@ -13,6 +13,7 @@ import com.aus.gemini01.MainActivity
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.data.NewsRepository
 import com.aus.gemini01.data.SettingsRepository
+import com.aus.gemini01.data.feedOrAiErrorMessage
 import com.aus.gemini01.data.newsFeedErrorMessage
 import com.aus.gemini01.data.ai.AiCacheKeys
 import com.aus.gemini01.data.ai.AiError
@@ -209,6 +210,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     // slower responses from overwriting newer results.
     private var fetchJob: Job? = null
     private var searchJob: Job? = null
+    private var pageJob: Job? = null
+    private var chatJob: Job? = null
+    /** Bumped on [clearChat] so in-flight replies cannot append to a cleared thread. */
+    private var chatGeneration = 0
 
     // The long-running AI calls behind the progress overlays.
     private var analysisJob: Job? = null
@@ -338,6 +343,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         fetchJob?.cancel()
+        searchJob?.cancel()
+        pageJob?.cancel()
         fetchJob = viewModelScope.launch {
             try {
                 val result = repository.getTopHeadlines(category, currentPage, countryCode.value)
@@ -421,7 +428,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: AiRequestException) {
                 _uiState.value = NewsUiState.Error(e.error.friendlyMessage())
             } catch (e: Exception) {
-                _uiState.value = NewsUiState.Error(AiError.Unknown(e.message).friendlyMessage())
+                _uiState.value = NewsUiState.Error(feedOrAiErrorMessage(e))
             } finally {
                 _isAnalysingInterests.value = false
             }
@@ -434,6 +441,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         // Without these, an in-flight category fetch or AI analysis would
         // overwrite the search results when it completes.
         fetchJob?.cancel()
+        pageJob?.cancel()
         analysisJob?.cancel()
         if (query.isBlank()) {
             fetchNews("general")
@@ -471,11 +479,10 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         val categoryAtStart = _selectedCategory.value
         val queryAtStart = _searchQuery.value
 
+        val pageToLoad = nextPageToLoad(currentPage)
         _isLoadingMore.value = true
-        currentPage++
-        val pageToLoad = currentPage
-
-        viewModelScope.launch {
+        pageJob?.cancel()
+        pageJob = viewModelScope.launch {
             try {
                 val newArticles = if (queryAtStart.isNotEmpty()) {
                     repository.searchNews(queryAtStart, pageToLoad)
@@ -487,7 +494,8 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     repository.getTopHeadlines(categoryAtStart, pageToLoad, countryCode.value).articles
                 }
 
-                // The user navigated away while this page was loading - discard it.
+                // The user navigated away while this page was loading - discard it
+                // without advancing currentPage so a later load retries this page.
                 if (_selectedCategory.value != categoryAtStart || _searchQuery.value != queryAtStart) {
                     return@launch
                 }
@@ -495,14 +503,16 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 val currentArticles = (_uiState.value as? NewsUiState.Success)?.articles ?: emptyList()
                 // NewsAPI pages can overlap; de-duplicate so LazyColumn keys stay unique.
                 _uiState.value = NewsUiState.Success((currentArticles + newArticles).distinctBy { it.url })
-                
+                currentPage = pageToLoad
+
                 if (newArticles.isEmpty()) {
                     isLastPage = true
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Pagination failures should not wipe the already-visible page.
+                // Pagination failures should not wipe the already-visible page
+                // or skip the failed page number on the next attempt.
                 _errorEvents.emit("Couldn't load more stories.")
             } finally {
                 _isLoadingMore.value = false
@@ -919,7 +929,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: AiRequestException) {
                 _uiState.value = NewsUiState.Error(e.error.friendlyMessage())
             } catch (e: Exception) {
-                _uiState.value = NewsUiState.Error(AiError.Unknown(e.message).friendlyMessage())
+                _uiState.value = NewsUiState.Error(feedOrAiErrorMessage(e))
             } finally {
                 _isAnalysingSmartThemes.value = false
             }
@@ -997,12 +1007,14 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         val userMessage = ChatMessage(query, true)
         _chatMessages.value += userMessage
         _isChatting.value = true
+        val generation = chatGeneration
 
-        viewModelScope.launch {
+        chatJob?.cancel()
+        chatJob = viewModelScope.launch {
             try {
                 // The headline briefing is merged into the first user turn: one
                 // Gemini request instead of two (briefing + query) per session.
-                val isFirstMessage = _chatMessages.value.size == 1
+                val isFirstMessage = _chatMessages.value.count { it.isUser } == 1
                 val messageToSend = if (isFirstMessage) {
                     val currentArticles = (_uiState.value as? NewsUiState.Success)?.articles ?: emptyList()
                     val context = currentArticles.take(15).joinToString("\n") { "- ${it.title}" }
@@ -1036,22 +1048,31 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     withTimeout(90_000) { chatSession.sendMessage(messageToSend) }.text
                         ?: "I couldn't process that."
                 }
+                if (generation != chatGeneration) return@launch
                 _chatMessages.value += ChatMessage(responseText, false)
             } catch (e: TimeoutCancellationException) {
+                if (generation != chatGeneration) return@launch
                 _chatMessages.value += ChatMessage(AiError.Timeout.friendlyMessage(), false)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AiRequestException) {
+                if (generation != chatGeneration) return@launch
                 _chatMessages.value += ChatMessage(e.error.friendlyMessage(), false)
             } catch (e: Exception) {
+                if (generation != chatGeneration) return@launch
                 _chatMessages.value += ChatMessage(AiError.Unknown(e.message).friendlyMessage(), false)
             } finally {
-                _isChatting.value = false
+                if (generation == chatGeneration) {
+                    _isChatting.value = false
+                }
             }
         }
     }
 
     fun clearChat() {
+        chatJob?.cancel()
+        chatGeneration++
+        _isChatting.value = false
         _chatMessages.value = emptyList()
         chatSession = generativeModel.startChat()
     }
