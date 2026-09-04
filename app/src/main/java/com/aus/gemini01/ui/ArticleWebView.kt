@@ -50,8 +50,8 @@ fun ArticleWebView(
                         ): Boolean {
                             // Only allow http(s) navigation; block file://, content://,
                             // javascript:, intent:// and other non-web schemes.
-                            val scheme = request?.url?.scheme
-                            return scheme != null && scheme != "http" && scheme != "https"
+                            val scheme = request?.url?.scheme?.lowercase()
+                            return scheme != "http" && scheme != "https"
                         }
 
                         override fun onReceivedSslError(
@@ -73,10 +73,14 @@ fun ArticleWebView(
                         domStorageEnabled = false
                     }
                     // Defensive: article.url arrives from a third-party feed.
-                    if (url.toUri().scheme in setOf("http", "https")) {
+                    if (url.toUri().scheme?.lowercase() in setOf("http", "https")) {
                         loadUrl(url)
                     }
                 }
+            },
+            onRelease = { webView ->
+                webView.stopLoading()
+                webView.destroy()
             },
             modifier = Modifier
                 .padding(innerPadding)

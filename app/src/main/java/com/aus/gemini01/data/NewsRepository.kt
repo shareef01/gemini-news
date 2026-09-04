@@ -80,9 +80,11 @@ class NewsRepository(private val newsDao: NewsDao) {
             // Only cache the first page
             if (page == 1 && category != "bookmarks") {
                 val cutoff = Instant.now().minusSeconds(CACHE_TTL_DAYS * 24 * 3600).toString()
-                newsDao.deleteCachedArticlesOlderThan(cutoff)
-                newsDao.deleteCachedArticlesByCategory(effectiveCategory)
-                newsDao.insertCachedArticles(articles.map { it.toCachedEntity(effectiveCategory) })
+                newsDao.replaceCachedArticles(
+                    category = effectiveCategory,
+                    articles = articles.map { it.toCachedEntity(effectiveCategory) },
+                    cutoff = cutoff
+                )
             }
 
             FeedResult(articles, fromCache = false)
@@ -144,8 +146,7 @@ class NewsRepository(private val newsDao: NewsDao) {
 
     suspend fun addToHistory(article: Article) {
         val timestamp = System.currentTimeMillis()
-        newsDao.insertHistory(article.toHistoryEntity(timestamp))
-        newsDao.trimHistory(50) // Keep only the last 50 entries
+        newsDao.insertAndTrimHistory(article.toHistoryEntity(timestamp), 50)
     }
 
     suspend fun clearCache() {

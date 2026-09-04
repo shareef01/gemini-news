@@ -51,9 +51,9 @@ class NewsWorker(
             Result.success()
         } catch (e: HttpException) {
             // 4xx (e.g. bad/rotated API key) will never succeed by retrying.
-            if (e.code() in 400..499) Result.failure() else Result.retry()
+            if (e.code() in 400..499 || runAttemptCount > 3) Result.failure() else Result.retry()
         } catch (e: Exception) {
-            Result.retry()
+            if (runAttemptCount > 3) Result.failure() else Result.retry()
         }
     }
 }

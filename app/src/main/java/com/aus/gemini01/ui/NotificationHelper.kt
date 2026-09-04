@@ -30,7 +30,13 @@ object NotificationHelper {
         notificationManager.createNotificationChannel(channel)
     }
 
-    fun showNotification(context: Context, title: String, message: String, notificationId: Int = 1) {
+    fun showNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int = 1,
+        deepLink: android.net.Uri? = null
+    ) {
         // On Android 13+ notifications require the runtime POST_NOTIFICATIONS permission;
         // skip silently instead of crashing from background workers.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -41,9 +47,15 @@ object NotificationHelper {
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            if (deepLink != null) {
+                data = deepLink
+            }
         }
         val pendingIntent: PendingIntent = PendingIntent.getActivity(
-            context, 0, intent, PendingIntent.FLAG_IMMUTABLE
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)

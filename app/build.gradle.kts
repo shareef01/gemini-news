@@ -60,6 +60,10 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "src/main/proguard/proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -86,7 +90,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.firebase.ai)
     implementation(libs.firebase.appcheck.playintegrity)
-    implementation(libs.firebase.appcheck.debug)
+    debugImplementation(libs.firebase.appcheck.debug)
     implementation(libs.retrofit)
     implementation(libs.retrofit.serialization)
     implementation(libs.coil.compose)

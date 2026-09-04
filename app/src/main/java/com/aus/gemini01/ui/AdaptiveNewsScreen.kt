@@ -51,8 +51,8 @@ fun AdaptiveNewsScreen(
     val isChatting by viewModel.isChatting.collectAsState()
 
     var selectedArticleForWeb by rememberSaveable { mutableStateOf<Article?>(null) }
-    var showSettings by remember { mutableStateOf(false) }
-    var showChat by remember { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showChat by rememberSaveable { mutableStateOf(false) }
 
     // Logic to decide what goes in the detail pane
     val currentDetailArticle = navigator.currentDestination?.contentKey

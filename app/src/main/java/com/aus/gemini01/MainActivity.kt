@@ -24,8 +24,8 @@ import com.aus.gemini01.ui.NotificationHelper
 import com.aus.gemini01.ui.theme.Gemini01Theme
 import com.aus.gemini01.worker.NewsWorker
 import com.aus.gemini01.worker.ReminderWorker
+import com.google.firebase.appcheck.AppCheckProviderFactory
 import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
@@ -85,8 +85,14 @@ class MainActivity : ComponentActivity() {
      * App Check enforcement is enabled).
      */
     private fun installAppCheckProvider() {
-        val factory = if (BuildConfig.DEBUG) {
-            DebugAppCheckProviderFactory.getInstance()
+        val factory: AppCheckProviderFactory = if (BuildConfig.DEBUG) {
+            try {
+                val clazz = Class.forName("com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory")
+                val method = clazz.getMethod("getInstance")
+                method.invoke(null) as AppCheckProviderFactory
+            } catch (_: Exception) {
+                PlayIntegrityAppCheckProviderFactory.getInstance()
+            }
         } else {
             PlayIntegrityAppCheckProviderFactory.getInstance()
         }
