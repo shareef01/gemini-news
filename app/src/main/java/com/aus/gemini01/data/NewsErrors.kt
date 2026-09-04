@@ -6,6 +6,8 @@ import retrofit2.HttpException
 fun newsFeedErrorMessage(error: Throwable): String {
     val http = error as? HttpException
     return when {
+        error is MissingNewsApiKeyException ->
+            "News API key is not configured. Add NEWS_API_KEY to local.properties and rebuild."
         http?.code() == 429 ->
             "NewsAPI rate limit reached. Your cached stories are unchanged — try again later."
         http != null && http.code() in 400..499 ->

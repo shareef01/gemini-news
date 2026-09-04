@@ -25,7 +25,6 @@ import com.aus.gemini01.ui.theme.Gemini01Theme
 import com.aus.gemini01.worker.NewsWorker
 import com.aus.gemini01.worker.ReminderWorker
 import kotlinx.coroutines.launch
-import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
@@ -122,28 +121,10 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         try {
             intent?.data?.let { uri ->
-                if (uri.scheme == "newsapp") {
-                    when (uri.host) {
-                        "category" -> {
-                            val category = uri.lastPathSegment
-                            if (category != null) {
-                                viewModel.fetchNews(category)
-                            }
-                        }
-                        "search" -> {
-                            val query = uri.lastPathSegment?.let {
-                                try {
-                                    URLDecoder.decode(it, "UTF-8")
-                                } catch (e: IllegalArgumentException) {
-                                    // Malformed percent-encoding must not crash the app.
-                                    null
-                                }
-                            }
-                            if (query != null) {
-                                viewModel.searchNews(query)
-                            }
-                        }
-                    }
+                when (val link = parseNewsDeepLink(uri.scheme, uri.host, uri.lastPathSegment)) {
+                    is NewsDeepLink.Category -> viewModel.fetchNews(link.name)
+                    is NewsDeepLink.Search -> viewModel.searchNews(link.query)
+                    null -> Unit
                 }
             }
         } catch (_: Exception) {

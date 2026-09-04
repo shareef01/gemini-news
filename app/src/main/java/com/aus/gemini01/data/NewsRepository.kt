@@ -20,6 +20,14 @@ import retrofit2.HttpException
 // doesn't accumulate stale news indefinitely.
 private const val CACHE_TTL_DAYS = 7L
 
+/** Thrown when BuildConfig was built without NEWS_API_KEY (empty local.properties / env). */
+class MissingNewsApiKeyException :
+    IOException("NEWS_API_KEY is not configured. Add it to local.properties (or the environment) and rebuild.")
+
+internal fun requireNewsApiKey() {
+    if (BuildConfig.NEWS_API_KEY.isBlank()) throw MissingNewsApiKeyException()
+}
+
 /** Whether a successful network response should replace the Room feed cache. */
 internal fun shouldReplaceFeedCache(
     page: Int,
@@ -32,6 +40,7 @@ internal fun shouldReplaceFeedCache(
  * that misleads users and hides quota pressure.
  */
 internal fun shouldOfflineFallbackOnError(error: Throwable): Boolean {
+    if (error is MissingNewsApiKeyException) return false
     val http = error as? HttpException ?: return true
     return http.code() !in 400..499
 }
@@ -76,6 +85,7 @@ class NewsRepository(private val newsDao: NewsDao) {
         val effectiveCategory = category ?: "general"
 
         return try {
+            requireNewsApiKey()
             val response = apiService.getTopHeadlines(
                 country = countryCode,
                 category = effectiveCategory,
@@ -127,6 +137,7 @@ class NewsRepository(private val newsDao: NewsDao) {
     }
 
     suspend fun searchNews(query: String, page: Int = 1): List<Article> {
+        requireNewsApiKey()
         val response = apiService.searchNews(query = query, page = page, apiKey = BuildConfig.NEWS_API_KEY)
         if (response.status == "error") {
             throw IOException(response.message ?: "News API error: ${response.code}")

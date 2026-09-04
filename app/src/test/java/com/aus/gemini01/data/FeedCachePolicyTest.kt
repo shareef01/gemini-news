@@ -56,4 +56,16 @@ class FeedCachePolicyTest {
         assertTrue(msg.contains("rate limit", ignoreCase = true))
         assertFalse(msg.contains("UnknownHost", ignoreCase = true))
     }
+
+    @Test
+    fun `missing_api_key_does_not_use_offline_fallback`() {
+        assertFalse(shouldOfflineFallbackOnError(MissingNewsApiKeyException()))
+    }
+
+    @Test
+    fun `missing_api_key_message_is_actionable`() {
+        val msg = newsFeedErrorMessage(MissingNewsApiKeyException())
+        assertTrue(msg.contains("NEWS_API_KEY", ignoreCase = true))
+        assertTrue(msg.contains("local.properties", ignoreCase = true))
+    }
 }
