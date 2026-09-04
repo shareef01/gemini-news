@@ -24,9 +24,6 @@ import com.aus.gemini01.ui.NotificationHelper
 import com.aus.gemini01.ui.theme.Gemini01Theme
 import com.aus.gemini01.worker.NewsWorker
 import com.aus.gemini01.worker.ReminderWorker
-import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
@@ -38,7 +35,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        installAppCheckProvider()
+        AppCheckInstallerImpl().install(this)
         handleIntent(intent)
         NotificationHelper.createNotificationChannel(this)
 
@@ -76,21 +73,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    /**
-     * Attests requests to Vertex AI in Firebase (gemini-flash-latest). Release builds
-     * use Play Integrity; debug builds use the debug provider (its auto-generated
-     * secret is logged to Logcat and must be registered as a debug token when
-     * App Check enforcement is enabled).
-     */
-    private fun installAppCheckProvider() {
-        val factory = if (BuildConfig.DEBUG) {
-            DebugAppCheckProviderFactory.getInstance()
-        } else {
-            PlayIntegrityAppCheckProviderFactory.getInstance()
-        }
-        FirebaseAppCheck.getInstance().installAppCheckProviderFactory(factory)
     }
 
     private fun scheduleNewsWork() {

@@ -19,6 +19,13 @@ import java.io.IOException
 // doesn't accumulate stale news indefinitely.
 private const val CACHE_TTL_DAYS = 7L
 
+/** Whether a successful network response should replace the Room feed cache. */
+internal fun shouldReplaceFeedCache(
+    page: Int,
+    category: String?,
+    articleCount: Int
+): Boolean = page == 1 && category != "bookmarks" && articleCount > 0
+
 /**
  * Feed payload plus its origin. `fromCache = true` means the network failed and
  * Room served the last successful fetch, so the UI can tell the user they are
@@ -77,8 +84,10 @@ class NewsRepository(private val newsDao: NewsDao) {
                 it.url != "https://removed.com"
             }
 
-            // Only cache the first page
-            if (page == 1 && category != "bookmarks") {
+            // Only cache the first page, and never replace a good cache with an
+            // empty success payload (NewsAPI can return zero usable articles
+            // after filtering [Removed] rows).
+            if (shouldReplaceFeedCache(page, category, articles.size)) {
                 val cutoff = Instant.now().minusSeconds(CACHE_TTL_DAYS * 24 * 3600).toString()
                 newsDao.deleteCachedArticlesOlderThan(cutoff)
                 newsDao.deleteCachedArticlesByCategory(effectiveCategory)

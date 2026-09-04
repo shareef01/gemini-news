@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.aus.gemini01.data.ai.GEMINI_MODEL_LABEL
 import com.aus.gemini01.ui.components.ConfirmationDialog
 import com.aus.gemini01.ui.theme.Dimens
 
@@ -74,7 +75,7 @@ fun SettingsScreen(
     if (showClearHistoryDialog) {
         ConfirmationDialog(
             title = "Clear Reading History?",
-            text = "This will delete your local reading history and reset weekly reading analysis.",
+            text = "This will delete your local reading history. Cached AI reading-stats results are cleared only when you also clear the headlines & AI cache.",
             confirmText = "Clear History",
             isDestructive = true,
             onConfirm = {
@@ -405,7 +406,7 @@ private fun AiDiagnosticsCard(viewModel: NewsViewModel) {
                     Spacer(modifier = Modifier.width(Dimens.spaceM))
                     Column {
                         Text(
-                            text = "Gemini 2.5 Flash",
+                            text = GEMINI_MODEL_LABEL,
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface

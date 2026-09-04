@@ -19,6 +19,9 @@ interface AiResultDao {
     @Query("SELECT kind, COUNT(*) as count FROM ai_results GROUP BY kind")
     fun countsByKind(): Flow<List<AiKindCount>>
 
+    @Query("DELETE FROM ai_results WHERE createdAt < :cutoffEpochMs")
+    suspend fun deleteOlderThan(cutoffEpochMs: Long): Int
+
     @Query("DELETE FROM ai_results")
     suspend fun clearAll()
 }

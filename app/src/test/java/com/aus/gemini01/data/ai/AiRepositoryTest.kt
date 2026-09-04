@@ -32,6 +32,12 @@ class FakeAiResultDao : AiResultDao {
     override fun countsByKind(): Flow<List<AiKindCount>> =
         flowOf(store.values.groupBy { it.kind }.map { AiKindCount(it.key, it.value.size) })
 
+    override suspend fun deleteOlderThan(cutoffEpochMs: Long): Int {
+        val before = store.size
+        store.entries.removeAll { it.value.createdAt < cutoffEpochMs }
+        return before - store.size
+    }
+
     override suspend fun clearAll() {
         store.clear()
     }
@@ -85,7 +91,7 @@ class AiRepositoryTest {
                 kind = AiFeature.SUMMARY.id,
                 articleUrl = "https://example.com/1",
                 result = "Cached Summary",
-                createdAt = 1000L
+                createdAt = System.currentTimeMillis()
             )
         )
 
@@ -215,5 +221,83 @@ class AiRepositoryTest {
 
         assertEquals(key1, key2)
         assertNotEquals(key1, keySpanish)
+    }
+
+    @Test
+    fun `cachedOrFetch regenerates when cached result exceeds feature TTL`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val repository = AiRepository(dao, telemetry)
+        val now = System.currentTimeMillis()
+
+        dao.insert(
+            AiResultEntity(
+                cacheKey = "key_ttl",
+                kind = AiFeature.TRENDS.id,
+                articleUrl = null,
+                result = "Stale trends",
+                createdAt = now - AiFeature.TRENDS.cacheTtlMs - 1_000
+            )
+        )
+
+        val result = repository.cachedOrFetch("key_ttl", AiFeature.TRENDS) { "Fresh trends" }
+
+        assertEquals("Fresh trends", result)
+        assertEquals("Fresh trends", dao.get("key_ttl")?.result)
+        assertEquals(1, telemetry.cacheMisses.size)
+        assertEquals(0, telemetry.cacheHits.size)
+    }
+
+    @Test
+    fun `sameRequest_50ConcurrentCallers_onlyOneRemoteInvocation`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val repository = AiRepository(dao, telemetry, testScope)
+        val fetchCount = AtomicInteger(0)
+        val gate = CompletableDeferred<Unit>()
+
+        val jobs = List(50) {
+            testScope.async {
+                repository.cachedOrFetch("key_50", AiFeature.SUMMARY) {
+                    fetchCount.incrementAndGet()
+                    gate.await()
+                    "shared"
+                }
+            }
+        }
+        gate.complete(Unit)
+        val results = jobs.map { it.await() }
+
+        assertEquals(50, results.size)
+        assertTrue(results.all { it == "shared" })
+        assertEquals(1, fetchCount.get())
+    }
+
+    @Test
+    fun `failedSharedRequest_isRemovedFromInflightMap`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val repository = AiRepository(dao, telemetry)
+
+        try {
+            repository.cachedOrFetch("key_fail", AiFeature.SUMMARY) {
+                throw RuntimeException("429 quota")
+            }
+            fail("Expected AiRequestException")
+        } catch (_: AiRequestException) {
+        }
+
+        var secondFetch = 0
+        try {
+            repository.cachedOrFetch("key_fail", AiFeature.SUMMARY) {
+                secondFetch++
+                throw RuntimeException("429 quota again")
+            }
+            fail("Expected AiRequestException")
+        } catch (_: AiRequestException) {
+        }
+
+        assertEquals(1, secondFetch)
     }
 }
