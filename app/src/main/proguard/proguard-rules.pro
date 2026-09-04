@@ -30,3 +30,10 @@
 
 # Retrofit (generic signatures used reflectively)
 -keepattributes Signature, Exceptions, RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
+
+# Article/Source are java.io.Serializable and used as rememberSaveable /
+# adaptive-navigator keys. Field renames break Bundle restore after process death.
+-keepnames class com.aus.gemini01.data.Article
+-keepclassmembers class com.aus.gemini01.data.Article { <fields>; }
+-keepnames class com.aus.gemini01.data.Source
+-keepclassmembers class com.aus.gemini01.data.Source { <fields>; }

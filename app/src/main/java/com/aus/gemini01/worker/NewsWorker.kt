@@ -8,7 +8,6 @@ import com.aus.gemini01.data.SettingsRepository
 import com.aus.gemini01.data.local.AppDatabase
 import com.aus.gemini01.ui.NotificationHelper
 import kotlinx.coroutines.flow.first
-import retrofit2.HttpException
 
 class NewsWorker(
     context: Context,
@@ -39,21 +38,20 @@ class NewsWorker(
                 val lastNotifiedUrl = settingsRepository.lastNotifiedUrl.first()
 
                 if (latestArticle.url != lastNotifiedUrl) {
-                    NotificationHelper.showNotification(
+                    val shown = NotificationHelper.showNotification(
                         applicationContext,
                         "Breaking News",
                         latestArticle.title,
                         notificationId = 1001
                     )
-                    settingsRepository.setLastNotifiedUrl(latestArticle.url)
+                    if (shouldPersistNotifiedUrl(shown)) {
+                        settingsRepository.setLastNotifiedUrl(latestArticle.url)
+                    }
                 }
             }
             Result.success()
-        } catch (e: HttpException) {
-            // 4xx (e.g. bad/rotated API key) will never succeed by retrying.
-            if (e.code() in 400..499) Result.failure() else Result.retry()
         } catch (e: Exception) {
-            Result.retry()
+            if (isPermanentNewsWorkerFailure(e)) Result.failure() else Result.retry()
         }
     }
 }

@@ -1,7 +1,6 @@
 package com.aus.gemini01.worker
 
 import android.content.Context
-import android.net.Uri
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.aus.gemini01.data.NewsRepository
