@@ -13,6 +13,7 @@ import com.aus.gemini01.MainActivity
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.data.NewsRepository
 import com.aus.gemini01.data.SettingsRepository
+import com.aus.gemini01.data.newsFeedErrorMessage
 import com.aus.gemini01.data.ai.AiCacheKeys
 import com.aus.gemini01.data.ai.AiError
 import com.aus.gemini01.data.ai.AiFeature
@@ -281,7 +282,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    _uiState.value = NewsUiState.Error(e.localizedMessage ?: "Unknown error")
+                    _uiState.value = NewsUiState.Error(newsFeedErrorMessage(e))
                 } finally {
                     _isRefreshing.value = false
                 }
@@ -352,9 +353,9 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 throw e
             } catch (e: Exception) {
                 if (isManualRefresh) {
-                    _errorEvents.emit("Could not refresh: ${e.localizedMessage}")
+                    _errorEvents.emit(newsFeedErrorMessage(e))
                 } else {
-                    _uiState.value = NewsUiState.Error(e.localizedMessage ?: "Unknown error")
+                    _uiState.value = NewsUiState.Error(newsFeedErrorMessage(e))
                 }
             } finally {
                 _isRefreshing.value = false
@@ -455,7 +456,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.value = NewsUiState.Error(e.localizedMessage ?: "Unknown error")
+                _uiState.value = NewsUiState.Error(newsFeedErrorMessage(e))
             }
         }
     }
@@ -535,6 +536,11 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     fun setNotificationsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setNotificationsEnabled(enabled)
+            // Breaking-news worker no-ops while the free-tier saver is on.
+            // Turning alerts on implies the user wants background fetches.
+            if (enabled && newsApiFreeTier.value) {
+                settingsRepository.setNewsApiFreeTier(false)
+            }
         }
     }
 
@@ -547,6 +553,11 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     fun setNewsApiFreeTier(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setNewsApiFreeTier(enabled)
+            // Re-enabling the saver while alerts are on would silently disable
+            // background fetches — turn alerts off so the UI stays honest.
+            if (enabled && notificationsEnabled.value) {
+                settingsRepository.setNotificationsEnabled(false)
+            }
         }
     }
 

@@ -120,30 +120,34 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        intent?.data?.let { uri ->
-            if (uri.scheme == "newsapp") {
-                when (uri.host) {
-                    "category" -> {
-                        val category = uri.lastPathSegment
-                        if (category != null) {
-                            viewModel.fetchNews(category)
-                        }
-                    }
-                    "search" -> {
-                        val query = uri.lastPathSegment?.let {
-                            try {
-                                URLDecoder.decode(it, "UTF-8")
-                            } catch (e: IllegalArgumentException) {
-                                // Malformed percent-encoding must not crash the app.
-                                null
+        try {
+            intent?.data?.let { uri ->
+                if (uri.scheme == "newsapp") {
+                    when (uri.host) {
+                        "category" -> {
+                            val category = uri.lastPathSegment
+                            if (category != null) {
+                                viewModel.fetchNews(category)
                             }
                         }
-                        if (query != null) {
-                            viewModel.searchNews(query)
+                        "search" -> {
+                            val query = uri.lastPathSegment?.let {
+                                try {
+                                    URLDecoder.decode(it, "UTF-8")
+                                } catch (e: IllegalArgumentException) {
+                                    // Malformed percent-encoding must not crash the app.
+                                    null
+                                }
+                            }
+                            if (query != null) {
+                                viewModel.searchNews(query)
+                            }
                         }
                     }
                 }
             }
+        } catch (_: Exception) {
+            // Hostile or framework-odd deep links must never crash the launcher.
         }
     }
 }
