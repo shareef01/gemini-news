@@ -21,7 +21,7 @@ import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 
 class FakeAiResultDao : AiResultDao {
-    val store = mutableMapOf<String, AiResultEntity>()
+    private val store = java.util.concurrent.ConcurrentHashMap<String, AiResultEntity>()
 
     override suspend fun get(key: String): AiResultEntity? = store[key]
 
@@ -33,9 +33,9 @@ class FakeAiResultDao : AiResultDao {
         flowOf(store.values.groupBy { it.kind }.map { AiKindCount(it.key, it.value.size) })
 
     override suspend fun deleteOlderThan(cutoffEpochMs: Long): Int {
-        val before = store.size
-        store.entries.removeAll { it.value.createdAt < cutoffEpochMs }
-        return before - store.size
+        val toRemove = store.entries.filter { it.value.createdAt < cutoffEpochMs }.map { it.key }
+        toRemove.forEach { store.remove(it) }
+        return toRemove.size
     }
 
     override suspend fun clearAll() {
@@ -255,18 +255,29 @@ class AiRepositoryTest {
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val repository = AiRepository(dao, telemetry, testScope)
         val fetchCount = AtomicInteger(0)
-        val gate = CompletableDeferred<Unit>()
+        val readyCount = AtomicInteger(0)
+        val start = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Unit>()
 
         val jobs = List(50) {
             testScope.async {
+                readyCount.incrementAndGet()
+                start.await()
                 repository.cachedOrFetch("key_50", AiFeature.SUMMARY) {
                     fetchCount.incrementAndGet()
-                    gate.await()
+                    hold.await()
                     "shared"
                 }
             }
         }
-        gate.complete(Unit)
+        // Suspend-friendly barrier (never block Default pool threads with a Latch).
+        while (readyCount.get() < 50) {
+            kotlinx.coroutines.delay(1)
+        }
+        start.complete(Unit)
+        // Give callers a moment to join the single-flight Deferred before release.
+        kotlinx.coroutines.delay(50)
+        hold.complete(Unit)
         val results = jobs.map { it.await() }
 
         assertEquals(50, results.size)

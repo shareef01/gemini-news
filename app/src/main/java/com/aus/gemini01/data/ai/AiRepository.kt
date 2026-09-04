@@ -52,6 +52,16 @@ class AiRepository(
         val deferred = synchronized(inFlight) {
             inFlight[cacheKey] ?: scope.async {
                 try {
+                    // Another caller may have finished and written the cache while
+                    // we were waiting to enter the single-flight map — reuse it.
+                    dao.get(cacheKey)?.let { cached ->
+                        val ageMs = System.currentTimeMillis() - cached.createdAt
+                        val ttl = feature.cacheTtlMs
+                        if (ttl <= 0L || ageMs <= ttl) {
+                            telemetry.recordCacheHit(feature)
+                            return@async cached.result
+                        }
+                    }
                     telemetry.recordRequest(feature)
                     val result = fetch()
                     dao.insert(
