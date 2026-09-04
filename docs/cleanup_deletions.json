@@ -1,0 +1,52 @@
+{
+  "baseCommit": "6d9b69dbe9860c50b31e880e3d73171a2a5434ee",
+  "cleanupBranch": "cursor/cleanup-unused-files-e91d",
+  "backupBranch": "cursor/backup-pre-cleanup-e91d",
+  "policy": "conservative",
+  "removed": [
+    {
+      "path": "docs/screenshots/04_news_map.png",
+      "commit": "d746e77",
+      "reason": "Orphan screenshot with zero README/docs/code/CI references",
+      "heuristics": ["filename_search", "readme_inventory"],
+      "evidence": [
+        "rg -n '04_news_map|news_map\\.png' → no matches",
+        "README embeds 01/02/03/04_ai_chat/05/06 only"
+      ]
+    },
+    {
+      "path": "app/src/test/java/com/aus/gemini01/ExampleUnitTest.kt",
+      "commit": "d746e77",
+      "reason": "Android Studio template unit test (2+2); no product coverage",
+      "heuristics": ["content_inspection", "reference_search"],
+      "evidence": [
+        "rg ExampleUnitTest|addition_isCorrect → self-only",
+        "file body is default AS template"
+      ]
+    }
+  ],
+  "manualReview": [
+    {
+      "path": ".githooks/pre-commit",
+      "why": "Optional local hooksPath wiring; not dead, just unconfigured"
+    },
+    {
+      "path": ".idea/planningMode.xml",
+      "why": "Possible IDE agent noise; .idea partially tracked by policy"
+    },
+    {
+      "path": ".idea/deploymentTargetSelector.xml",
+      "why": "Per-machine device UI state"
+    },
+    {
+      "path": ".idea/appInsightsSettings.xml",
+      "why": "App Insights UI prefs; redundant with google-services for builds"
+    },
+    {
+      "path": ".idea/",
+      "why": "Shared Android Studio project settings; confirm team policy before pruning"
+    }
+  ],
+  "dependenciesRemoved": [],
+  "trackedFilesScanned": 131
+}
