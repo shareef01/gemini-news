@@ -54,6 +54,20 @@ class AiCacheKeysTest {
 
     @Test
     fun `model constant matches configured model`() {
-        assertEquals("gemini-flash-latest", GEMINI_MODEL)
+        assertEquals("gemini-2.5-flash", GEMINI_MODEL)
+        assertEquals("Gemini 2.5 Flash", GEMINI_MODEL_LABEL)
+        assertTrue(!GEMINI_MODEL.endsWith("-latest"))
+    }
+
+    @Test
+    fun `prompt version is pinned for cache invalidation`() {
+        assertEquals(2, AI_PROMPT_VERSION)
+    }
+
+    @Test
+    fun `time sensitive features use shorter TTLs than summaries`() {
+        assertTrue(AiFeature.TRENDS.cacheTtlMs < AiFeature.SUMMARY.cacheTtlMs)
+        assertTrue(AiFeature.LOCATIONS.cacheTtlMs < AiFeature.READER.cacheTtlMs)
+        assertEquals(0L, AiFeature.CHAT.cacheTtlMs)
     }
 }

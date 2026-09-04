@@ -35,15 +35,33 @@ class AiRepository(
         articleUrl: String? = null,
         fetch: suspend () -> String
     ): String {
-        dao.get(cacheKey)?.let {
-            telemetry.recordCacheHit(feature)
-            return it.result
+        dao.get(cacheKey)?.let { cached ->
+            val ageMs = System.currentTimeMillis() - cached.createdAt
+            val ttl = feature.cacheTtlMs
+            if (ttl <= 0L || ageMs <= ttl) {
+                telemetry.recordCacheHit(feature)
+                return cached.result
+            }
+            // Expired — fall through to regenerate. Stale row is overwritten on insert.
         }
         telemetry.recordCacheMiss(feature)
+
+        // Opportunistic prune of other expired rows (bounded cost; best-effort).
+        pruneExpired(feature)
 
         val deferred = synchronized(inFlight) {
             inFlight[cacheKey] ?: scope.async {
                 try {
+                    // Another caller may have finished and written the cache while
+                    // we were waiting to enter the single-flight map — reuse it.
+                    dao.get(cacheKey)?.let { cached ->
+                        val ageMs = System.currentTimeMillis() - cached.createdAt
+                        val ttl = feature.cacheTtlMs
+                        if (ttl <= 0L || ageMs <= ttl) {
+                            telemetry.recordCacheHit(feature)
+                            return@async cached.result
+                        }
+                    }
                     telemetry.recordRequest(feature)
                     val result = fetch()
                     dao.insert(
@@ -71,6 +89,19 @@ class AiRepository(
             telemetry.recordError(aiError)
             throw AiRequestException(aiError, e)
         }
+    }
+
+    private suspend fun pruneExpired(feature: AiFeature) {
+        val ttl = feature.cacheTtlMs
+        if (ttl <= 0L) return
+        // Use the shortest TTL among time-sensitive kinds so trends/locations
+        // don't linger when a longer-lived feature triggers a miss.
+        val cutoff = System.currentTimeMillis() - minOf(
+            AiFeature.TRENDS.cacheTtlMs,
+            AiFeature.LOCATIONS.cacheTtlMs,
+            AiFeature.FOR_YOU.cacheTtlMs
+        )
+        runCatching { dao.deleteOlderThan(cutoff) }
     }
 
     /**
