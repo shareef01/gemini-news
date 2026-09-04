@@ -13,7 +13,8 @@
   <img src="https://img.shields.io/badge/Jetpack_Compose-Material_3-4285F4.svg?style=flat-square&logo=jetpackcompose" alt="Compose" />
   <img src="https://img.shields.io/badge/AI-Google_Gemini_Vertex_AI-orange.svg?style=flat-square&logo=google" alt="Gemini" />
   <img src="https://img.shields.io/badge/Architecture-MVVM_Clean_StateFlow-green.svg?style=flat-square" alt="Architecture" />
-  <img src="https://img.shields.io/badge/Android_Target-API_36_(Android_16)-3DDC84.svg?style=flat-square&logo=android" alt="Android" />
+  <img src="https://img.shields.io/badge/Android_Target-API_37-3DDC84.svg?style=flat-square&logo=android" alt="Android" />
+  <img src="https://img.shields.io/badge/Min_SDK-API_31-3DDC84.svg?style=flat-square&logo=android" alt="Min SDK" />
   <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" />
 </p>
 
@@ -74,7 +75,7 @@ Built with **100% Jetpack Compose**, **Material 3 Adaptive Design**, **Firebase 
 
 ### 🧠 Gemini AI Intelligence
 - **Gemini Insights (Smart Summaries)**: One-tap analysis generating structured **Key Takeaways**, **Sentiment & Tone** badges, and **Key Entities**.
-- **Distraction-Free AI Reader Mode**: Strips paywalls, clutter, and ads into pure Markdown with custom font scaling and typography.
+- **Distraction-Free AI Reader Mode**: Reformats the NewsAPI title/description/content into clean Markdown with custom font scaling and typography. This does **not** download publisher HTML or bypass paywalls.
 - **Global News Trends**: Synthesizes cross-outlet reporting into the top macro-narratives shaping the world right now.
 - **AI News Map**: Extracts geographic locations mentioned in headlines and renders them on an interactive Google Maps globe.
 - **Conversational News Expert**: Chat directly with Gemini about breaking news, background context, or historical parallels.
@@ -138,11 +139,11 @@ com.aus.gemini01/
 | **Language** | Kotlin 2.3.21 |
 | **UI Framework** | Jetpack Compose (BOM 2026.08.00) & Material 3 |
 | **Adaptive UI** | AndroidX Compose Material3 Adaptive (1.3.0) |
-| **AI / LLM** | Google Gemini (`gemini-flash-latest`) via Firebase Vertex AI |
-| **Networking** | Retrofit 2, OkHttp 3, Kotlinx Serialization |
-| **Database** | Room 2.7.0 (with KSP) |
+| **AI / LLM** | Google Gemini (`gemini-2.5-flash`, pinned) via Firebase AI |
+| **Networking** | Retrofit 3.0.0, OkHttp (transitive), Kotlinx Serialization |
+| **Database** | Room 2.8.4 (with KSP) |
 | **Preferences** | AndroidX DataStore 1.2.1 |
-| **Background Sync** | AndroidX WorkManager 2.10.0 |
+| **Background Sync** | AndroidX WorkManager 2.11.2 |
 | **Image Loading** | Coil 3.5.0 (with OkHttp networking) |
 | **Mapping** | Google Maps Compose 8.4.0 & Play Services Maps 20.0.0 |
 | **Audio** | Android Text-To-Speech (TTS) |
@@ -153,9 +154,9 @@ com.aus.gemini01/
 
 ### Prerequisites
 - **Android Studio**: Ladybug (2024.2.1) or newer
-- **JDK**: Version 17 or higher
-- **Min SDK**: API 26 (Android 8.0 Oreo)
-- **Target SDK**: API 36 (Android 16)
+- **JDK**: Version 17 or higher (21 recommended)
+- **Min SDK**: API 31 (Android 12)
+- **Target / Compile SDK**: API 37
 
 ### Installation & Configuration
 
@@ -166,7 +167,7 @@ com.aus.gemini01/
    ```
 
 2. **Configure API Keys**:
-   Create a `local.properties` file in the root directory (this file is git-ignored for security):
+   Create a `local.properties` file in the root directory (this file is git-ignored):
    ```properties
    ## NewsAPI Key (from https://newsapi.org)
    NEWS_API_KEY=<your_news_api_key>
@@ -174,15 +175,17 @@ com.aus.gemini01/
    ## Google Maps API Key (from Google Cloud Console)
    MAPS_API_KEY=<your_maps_api_key>
    ```
+   Note: keys compiled into the APK are extractable. See [`docs/PRODUCTION_NOTES.md`](docs/PRODUCTION_NOTES.md).
 
-3. **Configure Firebase & Vertex AI**:
-   - Add your `google-services.json` to the `app/` directory.
-   - In your Firebase Console, enable **Vertex AI for Firebase** and activate Gemini Flash.
+3. **Firebase**:
+   - `app/google-services.json` is already present for the sample project.
+   - To use your own Firebase project, replace it and enable Firebase AI + App Check.
+   - Debug builds use the App Check debug provider; release builds use Play Integrity.
 
 4. **Build and Run**:
    ```bash
    # Run all unit tests
-   ./gradlew test
+   ./gradlew testDebugUnitTest
 
    # Install debug build to connected device
    ./gradlew installDebug
