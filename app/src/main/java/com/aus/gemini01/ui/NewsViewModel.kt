@@ -594,6 +594,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startVoiceSearch() {
+        stopSpeaking()
         voiceRecognizer.startListening()
     }
 

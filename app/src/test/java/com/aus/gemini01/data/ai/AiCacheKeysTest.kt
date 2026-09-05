@@ -54,14 +54,14 @@ class AiCacheKeysTest {
 
     @Test
     fun `model constant matches configured model`() {
-        assertEquals("gemini-2.5-flash", GEMINI_MODEL)
-        assertEquals("Gemini 2.5 Flash", GEMINI_MODEL_LABEL)
+        assertEquals("gemini-3.8-flash", GEMINI_MODEL)
+        assertEquals("Gemini 3.8 Flash", GEMINI_MODEL_LABEL)
         assertTrue(!GEMINI_MODEL.endsWith("-latest"))
     }
 
     @Test
     fun `prompt version is pinned for cache invalidation`() {
-        assertEquals(2, AI_PROMPT_VERSION)
+        assertEquals(3, AI_PROMPT_VERSION)
     }
 
     @Test

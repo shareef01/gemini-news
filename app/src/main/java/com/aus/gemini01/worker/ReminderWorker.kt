@@ -1,7 +1,7 @@
 package com.aus.gemini01.worker
 
 import android.content.Context
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.aus.gemini01.data.NewsRepository
@@ -30,7 +30,7 @@ class ReminderWorker(
                     "Catch up on your reading!",
                     "Don't forget to read: ${randomArticle.title}",
                     notificationId = 1002,
-                    deepLink = Uri.parse("newsapp://category/bookmarks")
+                    deepLink = "newsapp://category/bookmarks".toUri()
                 )
             }
             Result.success()

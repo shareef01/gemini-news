@@ -139,7 +139,7 @@ com.aus.gemini01/
 | **Language** | Kotlin 2.3.21 |
 | **UI Framework** | Jetpack Compose (BOM 2026.08.00) & Material 3 |
 | **Adaptive UI** | AndroidX Compose Material3 Adaptive (1.3.0) |
-| **AI / LLM** | Google Gemini (`gemini-2.5-flash`, pinned) via Firebase AI |
+| **AI / LLM** | Google Gemini (`gemini-3.8-flash`, pinned) via Firebase AI |
 | **Networking** | Retrofit 3.0.0, OkHttp (transitive), Kotlinx Serialization |
 | **Database** | Room 2.8.4 (with KSP) |
 | **Preferences** | AndroidX DataStore 1.2.1 |

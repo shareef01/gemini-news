@@ -1,6 +1,10 @@
 package com.aus.gemini01.ui
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -11,9 +15,18 @@ class TtsManager(
     context: Context,
     private val onPlaybackFinished: () -> Unit = {}
 ) : TextToSpeech.OnInitListener {
-    private var tts: TextToSpeech? = TextToSpeech(context.applicationContext, this)
+    private val appContext = context.applicationContext
+    private var tts: TextToSpeech? = TextToSpeech(appContext, this)
     private var isInitialized = false
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+            stop()
+            mainHandler.post { onPlaybackFinished() }
+        }
+    }
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
@@ -23,30 +36,73 @@ class TtsManager(
 
                 override fun onDone(utteranceId: String?) {
                     if (utteranceId?.endsWith("_last") == true || utteranceId == "news_reader_single") {
+                        abandonAudioFocus()
                         mainHandler.post { onPlaybackFinished() }
                     }
                 }
 
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
+                    abandonAudioFocus()
                     mainHandler.post { onPlaybackFinished() }
                 }
 
                 override fun onError(utteranceId: String?, errorCode: Int) {
+                    abandonAudioFocus()
                     mainHandler.post { onPlaybackFinished() }
                 }
             })
         }
     }
 
+    private fun requestAudioFocus(): Boolean {
+        val manager = audioManager ?: return true
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val playbackAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .setAudioAttributes(playbackAttributes)
+                .setAcceptsDelayedFocusGain(false)
+                .setOnAudioFocusChangeListener(focusChangeListener)
+                .build()
+            audioFocusRequest = request
+            manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        } else {
+            @Suppress("DEPRECATION")
+            manager.requestAudioFocus(
+                focusChangeListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        val manager = audioManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { manager.abandonAudioFocusRequest(it) }
+            audioFocusRequest = null
+        } else {
+            @Suppress("DEPRECATION")
+            manager.abandonAudioFocus(focusChangeListener)
+        }
+    }
+
     fun speak(text: String, languageName: String) {
         if (!isInitialized || text.isBlank()) return
+
+        requestAudioFocus()
 
         val locale = getLocaleForLanguage(languageName)
         tts?.language = locale
 
         val spoken = stripMarkdownForSpeech(text)
-        if (spoken.isBlank()) return
+        if (spoken.isBlank()) {
+            abandonAudioFocus()
+            return
+        }
 
         val maxLen = 3500
         if (spoken.length <= maxLen) {
@@ -119,12 +175,14 @@ class TtsManager(
 
     fun stop() {
         tts?.stop()
+        abandonAudioFocus()
     }
 
     fun release() {
         tts?.stop()
         tts?.shutdown()
         tts = null
+        abandonAudioFocus()
     }
 
     private fun getLocaleForLanguage(languageName: String): Locale {

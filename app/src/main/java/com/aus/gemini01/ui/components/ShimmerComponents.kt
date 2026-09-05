@@ -36,11 +36,13 @@ fun Modifier.shimmerEffect(): Modifier = composed {
     val baseColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val highlightColor = MaterialTheme.colorScheme.surfaceContainerLow
 
-    val shimmerColors = listOf(
-        baseColor.copy(alpha = 0.6f),
-        highlightColor.copy(alpha = 0.95f),
-        baseColor.copy(alpha = 0.6f)
-    )
+    val shimmerColors = androidx.compose.runtime.remember(baseColor, highlightColor) {
+        listOf(
+            baseColor.copy(alpha = 0.6f),
+            highlightColor.copy(alpha = 0.95f),
+            baseColor.copy(alpha = 0.6f)
+        )
+    }
 
     val brush = Brush.linearGradient(
         colors = shimmerColors,

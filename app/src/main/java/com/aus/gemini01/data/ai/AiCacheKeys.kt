@@ -6,18 +6,18 @@ import java.security.MessageDigest
  * Pinned stable Gemini model ID for production. Do not use `-latest` aliases —
  * Firebase AI Logic documents them as unstable for shipped apps.
  */
-const val GEMINI_MODEL = "gemini-2.5-flash"
+const val GEMINI_MODEL = "gemini-3.8-flash"
 
 /**
  * Human-readable label shown in Settings; must stay in sync with [GEMINI_MODEL].
  */
-const val GEMINI_MODEL_LABEL = "Gemini 2.5 Flash"
+const val GEMINI_MODEL_LABEL = "Gemini 3.8 Flash"
 
 /**
  * Bump when a prompt's instructions change in a way that alters the expected
  * output shape - existing cache entries then miss and regenerate once.
  */
-const val AI_PROMPT_VERSION = 2
+const val AI_PROMPT_VERSION = 3
 
 enum class AiFeature(val id: String) {
     SUMMARY("summary"),
