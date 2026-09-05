@@ -1,7 +1,7 @@
 # ⚡ Gemini News — AI-Powered Android News Platform
 
 <p align="center">
-  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp" width="100" alt="Gemini News Logo" />
+  <img src="docs/app-icon.svg" width="100" alt="Gemini News Logo" />
 </p>
 
 <p align="center">
