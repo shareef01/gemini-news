@@ -30,19 +30,24 @@ object NotificationHelper {
         notificationManager.createNotificationChannel(channel)
     }
 
+    /**
+     * @return true when the notification was posted to the system; false when
+     * skipped (e.g. POST_NOTIFICATIONS denied). Callers must not advance
+     * "already notified" state on false, or the headline is lost forever.
+     */
     fun showNotification(
         context: Context,
         title: String,
         message: String,
         notificationId: Int = 1,
         deepLink: android.net.Uri? = null
-    ) {
+    ): Boolean {
         // On Android 13+ notifications require the runtime POST_NOTIFICATIONS permission;
         // skip silently instead of crashing from background workers.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            return
+            return false
         }
 
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -69,5 +74,6 @@ object NotificationHelper {
         with(NotificationManagerCompat.from(context)) {
             notify(notificationId, builder.build())
         }
+        return true
     }
 }

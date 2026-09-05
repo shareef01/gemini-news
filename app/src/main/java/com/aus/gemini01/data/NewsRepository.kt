@@ -14,10 +14,36 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 import java.io.IOException
+import retrofit2.HttpException
 
 // Cached articles older than this are pruned on every fresh fetch, so the cache
 // doesn't accumulate stale news indefinitely.
 private const val CACHE_TTL_DAYS = 7L
+
+/** Thrown when BuildConfig was built without NEWS_API_KEY (empty local.properties / env). */
+class MissingNewsApiKeyException :
+    IOException("NEWS_API_KEY is not configured. Add it to local.properties (or the environment) and rebuild.")
+
+internal fun requireNewsApiKey() {
+    if (BuildConfig.NEWS_API_KEY.isBlank()) throw MissingNewsApiKeyException()
+}
+
+/** Whether a successful network response should replace the Room feed cache. */
+internal fun shouldReplaceFeedCache(
+    page: Int,
+    category: String?,
+    articleCount: Int
+): Boolean = page == 1 && category != "bookmarks" && articleCount > 0
+
+/**
+ * HTTP 4xx (including 429) must not be disguised as an offline-cache hit —
+ * that misleads users and hides quota pressure.
+ */
+internal fun shouldOfflineFallbackOnError(error: Throwable): Boolean {
+    if (error is MissingNewsApiKeyException) return false
+    val http = error as? HttpException ?: return true
+    return http.code() !in 400..499
+}
 
 /**
  * Feed payload plus its origin. `fromCache = true` means the network failed and
@@ -59,6 +85,7 @@ class NewsRepository(private val newsDao: NewsDao) {
         val effectiveCategory = category ?: "general"
 
         return try {
+            requireNewsApiKey()
             val response = apiService.getTopHeadlines(
                 country = countryCode,
                 category = effectiveCategory,
@@ -77,8 +104,10 @@ class NewsRepository(private val newsDao: NewsDao) {
                 it.url != "https://removed.com"
             }
 
-            // Only cache the first page
-            if (page == 1 && category != "bookmarks") {
+            // Only cache the first page, and never replace a good cache with an
+            // empty success payload (NewsAPI can return zero usable articles
+            // after filtering [Removed] rows).
+            if (shouldReplaceFeedCache(page, category, articles.size)) {
                 val cutoff = Instant.now().minusSeconds(CACHE_TTL_DAYS * 24 * 3600).toString()
                 newsDao.replaceCachedArticles(
                     category = effectiveCategory,
@@ -93,8 +122,8 @@ class NewsRepository(private val newsDao: NewsDao) {
             // category overwrite the one the user actually navigated to.
             throw e
         } catch (e: Exception) {
-            if (!allowOfflineFallback) throw e
-            // Offline fallback: serve the cached feed. If there is nothing cached,
+            if (!allowOfflineFallback || !shouldOfflineFallbackOnError(e)) throw e
+            // Offline / 5xx fallback: serve the cached feed. If there is nothing cached,
             // surface the real error instead of fabricating articles.
             if (page == 1) {
                 val cached = newsDao.getCachedArticles(effectiveCategory)
@@ -110,6 +139,7 @@ class NewsRepository(private val newsDao: NewsDao) {
     }
 
     suspend fun searchNews(query: String, page: Int = 1): List<Article> {
+        requireNewsApiKey()
         val response = apiService.searchNews(query = query, page = page, apiKey = BuildConfig.NEWS_API_KEY)
         if (response.status == "error") {
             throw IOException(response.message ?: "News API error: ${response.code}")

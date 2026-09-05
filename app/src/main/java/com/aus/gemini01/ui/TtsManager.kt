@@ -45,11 +45,14 @@ class TtsManager(
         val locale = getLocaleForLanguage(languageName)
         tts?.language = locale
 
+        val spoken = stripMarkdownForSpeech(text)
+        if (spoken.isBlank()) return
+
         val maxLen = 3500
-        if (text.length <= maxLen) {
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "news_reader_single")
+        if (spoken.length <= maxLen) {
+            tts?.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "news_reader_single")
         } else {
-            val chunks = chunkText(text, maxLen)
+            val chunks = chunkText(spoken, maxLen)
             chunks.forEachIndexed { index, chunk ->
                 val mode = if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
                 val utteranceId = if (index == chunks.lastIndex) "news_reader_chunk_${index}_last" else "news_reader_chunk_$index"
@@ -63,21 +66,39 @@ class TtsManager(
         val chunks = mutableListOf<String>()
         var currentChunk = StringBuilder()
 
+        fun flush() {
+            if (currentChunk.isNotEmpty()) {
+                chunks.add(currentChunk.toString().trim())
+                currentChunk = StringBuilder()
+            }
+        }
+
+        fun appendHardSplit(piece: String) {
+            var remaining = piece
+            while (remaining.length > maxChunkSize) {
+                flush()
+                chunks.add(remaining.substring(0, maxChunkSize))
+                remaining = remaining.substring(maxChunkSize)
+            }
+            if (remaining.isNotEmpty()) {
+                if (currentChunk.isNotEmpty()) currentChunk.append(' ')
+                currentChunk.append(remaining)
+            }
+        }
+
         for (p in paragraphs) {
             if (currentChunk.length + p.length + 2 > maxChunkSize) {
-                if (currentChunk.isNotEmpty()) {
-                    chunks.add(currentChunk.toString().trim())
-                    currentChunk = StringBuilder()
-                }
+                flush()
                 if (p.length > maxChunkSize) {
                     val sentences = p.split(". ")
                     for (s in sentences) {
                         if (currentChunk.length + s.length + 2 > maxChunkSize) {
-                            if (currentChunk.isNotEmpty()) {
-                                chunks.add(currentChunk.toString().trim())
-                                currentChunk = StringBuilder()
+                            flush()
+                            if (s.length > maxChunkSize) {
+                                appendHardSplit(s.trim())
+                            } else {
+                                currentChunk.append(s)
                             }
-                            chunks.add(s.trim())
                         } else {
                             if (currentChunk.isNotEmpty()) currentChunk.append(". ")
                             currentChunk.append(s)

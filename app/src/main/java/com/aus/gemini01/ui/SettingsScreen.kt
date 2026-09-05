@@ -24,6 +24,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.aus.gemini01.BuildConfig
+import com.aus.gemini01.data.ai.GEMINI_MODEL_LABEL
 import com.aus.gemini01.ui.components.ConfirmationDialog
 import com.aus.gemini01.ui.theme.Dimens
 
@@ -47,6 +49,12 @@ fun SettingsScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) viewModel.setNotificationsEnabled(true)
+    }
+
+    val reminderPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.setRemindersEnabled(true)
     }
 
     var countryExpanded by remember { mutableStateOf(false) }
@@ -74,7 +82,7 @@ fun SettingsScreen(
     if (showClearHistoryDialog) {
         ConfirmationDialog(
             title = "Clear Reading History?",
-            text = "This will delete your local reading history and reset weekly reading analysis.",
+            text = "This will delete your local reading history. Cached AI reading-stats results are cleared only when you also clear the headlines & AI cache.",
             confirmText = "Clear History",
             isDestructive = true,
             onConfirm = {
@@ -205,7 +213,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            "Pauses background polling to conserve API quotas",
+                            "Pauses background breaking-news polling to conserve NewsAPI quota. Turning this on disables breaking alerts.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -234,7 +242,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            "Top headline notifications when news breaks",
+                            "Top headline notifications when news breaks. Enables background NewsAPI polling (turns off free-tier saver).",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -277,7 +285,15 @@ fun SettingsScreen(
                     }
                     Switch(
                         checked = remindersEnabled,
-                        onCheckedChange = { viewModel.setRemindersEnabled(it) }
+                        onCheckedChange = { checked ->
+                            if (checked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                reminderPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                viewModel.setRemindersEnabled(checked)
+                            }
+                        }
                     )
                 }
             }
@@ -352,7 +368,7 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Gemini News v1.0.0",
+                        text = "Gemini News v${BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -405,7 +421,7 @@ private fun AiDiagnosticsCard(viewModel: NewsViewModel) {
                     Spacer(modifier = Modifier.width(Dimens.spaceM))
                     Column {
                         Text(
-                            text = "Gemini 2.5 Flash",
+                            text = GEMINI_MODEL_LABEL,
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface

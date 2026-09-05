@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AiResultEntity::class
     ],
     version = 5,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun newsDao(): NewsDao
@@ -24,7 +24,9 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         // v5: adds ai_results for persistent Gemini caching (summaries, reader
         // views, trend/theme analyses) keyed by url+kind+model+prompt version.
-        private val MIGRATION_4_5 = object : Migration(4, 5) {
+        // Exposed for migration tests — do not add destructive fallbacks here;
+        // missing migrations must fail loudly rather than wipe bookmarks/history.
+        val MIGRATION_4_5: Migration = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `ai_results` (" +
@@ -49,7 +51,6 @@ abstract class AppDatabase : RoomDatabase() {
                     "news_database"
                 )
                 .addMigrations(MIGRATION_4_5)
-                .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
                 INSTANCE = instance
                 instance

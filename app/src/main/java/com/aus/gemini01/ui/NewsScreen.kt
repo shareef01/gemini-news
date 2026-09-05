@@ -464,7 +464,7 @@ fun CategoryChips(
                     )
                 },
                 leadingIcon = icon?.let {
-                    { Icon(it, contentDescription = null, modifier = Modifier.size(Dimens.iconSizeXS)) }
+                    { Icon(it, contentDescription = label, modifier = Modifier.size(Dimens.iconSizeXS)) }
                 },
                 shape = MaterialTheme.shapes.large
             )

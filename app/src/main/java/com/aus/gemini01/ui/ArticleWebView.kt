@@ -3,11 +3,11 @@ package com.aus.gemini01.ui
 import android.net.http.SslError
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.core.net.toUri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -48,10 +48,9 @@ fun ArticleWebView(
                             view: WebView?,
                             request: WebResourceRequest?
                         ): Boolean {
-                            // Only allow http(s) navigation; block file://, content://,
-                            // javascript:, intent:// and other non-web schemes.
-                            val scheme = request?.url?.scheme?.lowercase()
-                            return scheme != "http" && scheme != "https"
+                            // HTTPS only; block http, file://, content://, javascript:,
+                            // intent:// and other non-web schemes.
+                            return request?.url?.scheme != "https"
                         }
 
                         override fun onReceivedSslError(
@@ -71,20 +70,18 @@ fun ArticleWebView(
                         allowContentAccess = false
                         javaScriptCanOpenWindowsAutomatically = false
                         domStorageEnabled = false
+                        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     }
-                    // Defensive: article.url arrives from a third-party feed.
-                    if (url.toUri().scheme?.lowercase() in setOf("http", "https")) {
-                        loadUrl(url)
-                    }
+                    safeArticleUrl(url)?.let { loadUrl(it) }
                 }
-            },
-            onRelease = { webView ->
-                webView.stopLoading()
-                webView.destroy()
             },
             modifier = Modifier
                 .padding(innerPadding)
-                .fillMaxSize()
+                .fillMaxSize(),
+            onRelease = { webView ->
+                webView.stopLoading()
+                webView.destroy()
+            }
         )
     }
 }
