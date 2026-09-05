@@ -1,6 +1,7 @@
 package com.aus.gemini01.ui
 
 import android.Manifest
+import android.net.Uri
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -18,6 +19,12 @@ object NotificationHelper {
     private const val CHANNEL_ID = "breaking_news_channel"
     private const val CHANNEL_NAME = "Breaking News"
     private const val CHANNEL_DESCRIPTION = "Notifications for new top headlines"
+
+    fun articleDeepLink(url: String): Uri = Uri.Builder()
+        .scheme("newsapp")
+        .authority("article")
+        .appendQueryParameter("url", url)
+        .build()
 
     fun createNotificationChannel(context: Context) {
         // minSdk is 31, so NotificationChannel (API 26+) is always available.

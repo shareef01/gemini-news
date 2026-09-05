@@ -128,7 +128,7 @@ com.aus.gemini01/
 - **Resilient AI Caching**: Multi-feature Room caching with SHA-256 content hashing eliminates redundant Gemini API calls and enables instant offline summaries.
 - **Concurrency Request Deduplication**: In-flight AI requests with identical parameters share single active coroutine jobs, preventing duplicate API charges.
 - **Error Taxonomy & Graceful Degradation**: Categorizes rate limits (`QuotaExceeded`), connectivity drops (`Network`), and timeouts with contextual user guidance.
-- **Fault-Tolerant Serialization**: Robust JSON parsing with `coerceInputValues = true` and `isLenient = true` guarantees protection against malformed third-party API payloads.
+- **Tolerant Serialization**: JSON parsing ignores unknown fields and tolerates some missing or mismatched optional values; unusable responses are still filtered or surfaced as errors rather than treated as trustworthy news.
 
 ---
 

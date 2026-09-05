@@ -42,7 +42,8 @@ class NewsWorker(
                         applicationContext,
                         "Breaking News",
                         latestArticle.title,
-                        notificationId = 1001
+                        notificationId = 1001,
+                        deepLink = NotificationHelper.articleDeepLink(latestArticle.url)
                     )
                     if (shouldPersistNotifiedUrl(shown)) {
                         settingsRepository.setLastNotifiedUrl(latestArticle.url)

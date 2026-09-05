@@ -283,6 +283,7 @@ class AiRepositoryTest {
         assertEquals(50, results.size)
         assertTrue(results.all { it == "shared" })
         assertEquals(1, fetchCount.get())
+        assertEquals(1, telemetry.cacheMisses.size)
     }
 
     @Test

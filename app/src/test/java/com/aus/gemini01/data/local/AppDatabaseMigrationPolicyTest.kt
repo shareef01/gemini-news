@@ -15,4 +15,11 @@ class AppDatabaseMigrationPolicyTest {
         assertEquals(4, migration.startVersion)
         assertEquals(5, migration.endVersion)
     }
+
+    @Test
+    fun `migration_5_6_spans_expected_versions`() {
+        val migration = AppDatabase.MIGRATION_5_6
+        assertEquals(5, migration.startVersion)
+        assertEquals(6, migration.endVersion)
+    }
 }

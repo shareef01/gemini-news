@@ -121,9 +121,15 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         try {
             intent?.data?.let { uri ->
-                when (val link = parseNewsDeepLink(uri.scheme, uri.host, uri.lastPathSegment)) {
+                when (val link = parseNewsDeepLink(
+                    uri.scheme,
+                    uri.host,
+                    uri.lastPathSegment,
+                    uri.getQueryParameter("url")
+                )) {
                     is NewsDeepLink.Category -> viewModel.fetchNews(link.name)
                     is NewsDeepLink.Search -> viewModel.searchNews(link.query)
+                    is NewsDeepLink.Article -> viewModel.openArticleFromDeepLink(link.url)
                     null -> Unit
                 }
             }

@@ -1,11 +1,13 @@
 package com.aus.gemini01.ui
 
+import android.os.Build
 import android.net.http.SslError
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -25,12 +27,20 @@ fun ArticleWebView(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { 
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1
-                    ) 
+                title = {
+                    Column {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = "Publisher page",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -65,12 +75,18 @@ fun ArticleWebView(
                         }
                     }
                     settings.apply {
-                        javaScriptEnabled = true
+                        // Publisher pages do not need JavaScript for this reader
+                        // surface. Keeping it off removes an unnecessary execution
+                        // surface for untrusted third-party pages.
+                        javaScriptEnabled = false
                         allowFileAccess = false
                         allowContentAccess = false
                         javaScriptCanOpenWindowsAutomatically = false
                         domStorageEnabled = false
                         mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            safeBrowsingEnabled = true
+                        }
                     }
                     safeArticleUrl(url)?.let { loadUrl(it) }
                 }

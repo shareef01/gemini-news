@@ -40,6 +40,21 @@ class AiCacheKeysTest {
     }
 
     @Test
+    fun `article evidence changes invalidate summary and reader keys`() {
+        val oldEvidence = AiCacheKeys.articleEvidenceFingerprint("Headline", "Old description", "Old body")
+        val newEvidence = AiCacheKeys.articleEvidenceFingerprint("Headline", "New description", "New body")
+        assertNotEquals(oldEvidence, newEvidence)
+        assertNotEquals(
+            AiCacheKeys.summary("https://x.com/a", "English", oldEvidence),
+            AiCacheKeys.summary("https://x.com/a", "English", newEvidence)
+        )
+        assertNotEquals(
+            AiCacheKeys.reader("https://x.com/a", "English", oldEvidence),
+            AiCacheKeys.reader("https://x.com/a", "English", newEvidence)
+        )
+    }
+
+    @Test
     fun `article list order matters for feed features`() {
         val a = listOf("u1", "u2")
         val b = listOf("u2", "u1")
@@ -61,7 +76,7 @@ class AiCacheKeysTest {
 
     @Test
     fun `prompt version is pinned for cache invalidation`() {
-        assertEquals(3, AI_PROMPT_VERSION)
+        assertEquals(4, AI_PROMPT_VERSION)
     }
 
     @Test

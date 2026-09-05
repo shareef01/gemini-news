@@ -116,7 +116,7 @@ private fun ReadingModeContent(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Distraction-free AI layout",
+                            text = "AI-formatted from NewsAPI fields",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -233,7 +233,7 @@ private fun ReadingModeContent(
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
                         Text(
-                            text = "Formatted by Gemini AI • Font: $fontSizeLabel",
+                            text = "AI-formatted from NewsAPI fields • Font: $fontSizeLabel",
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = Dimens.spaceL, vertical = Dimens.spaceS),
                             color = MaterialTheme.colorScheme.onSurfaceVariant

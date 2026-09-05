@@ -44,11 +44,6 @@ class AiRepository(
             }
             // Expired — fall through to regenerate. Stale row is overwritten on insert.
         }
-        telemetry.recordCacheMiss(feature)
-
-        // Opportunistic prune of other expired rows (bounded cost; best-effort).
-        pruneExpired(feature)
-
         val deferred = synchronized(inFlight) {
             inFlight[cacheKey] ?: scope.async {
                 try {
@@ -62,6 +57,11 @@ class AiRepository(
                             return@async cached.result
                         }
                     }
+                    // Only the single-flight owner records a miss and prunes;
+                    // concurrent waiters must not inflate diagnostics or race
+                    // on a non-thread-safe telemetry implementation.
+                    telemetry.recordCacheMiss(feature)
+                    pruneExpired(feature)
                     telemetry.recordRequest(feature)
                     val result = fetch()
                     dao.insert(

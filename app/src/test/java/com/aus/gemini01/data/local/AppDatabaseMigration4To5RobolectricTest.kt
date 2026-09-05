@@ -72,6 +72,43 @@ class AppDatabaseMigration4To5RobolectricTest {
         }
     }
 
+    @Test
+    fun migrate5To6_addsAndBackfillsCacheTimestamp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val config = SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name("migration-robolectric-news-v6")
+            .callback(object : SupportSQLiteOpenHelper.Callback(5) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    createV4Schema(db)
+                    AppDatabase.MIGRATION_4_5.migrate(db)
+                }
+
+                override fun onUpgrade(
+                    db: SupportSQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int
+                ) = Unit
+            })
+            .build()
+
+        val openHelper = FrameworkSQLiteOpenHelperFactory().create(config)
+        openHelper.writableDatabase.use { db ->
+            db.execSQL(
+                """
+                INSERT INTO cached_articles (url, category, sourceName, author, title, description, urlToImage, publishedAt, content)
+                VALUES ('https://example.com/c', 'general', 'Src', NULL, 'Cached', NULL, NULL, 'not-a-date', NULL)
+                """.trimIndent()
+            )
+
+            AppDatabase.MIGRATION_5_6.migrate(db)
+
+            db.query("SELECT cachedAt FROM cached_articles WHERE url = 'https://example.com/c'").use { c ->
+                assertTrue(c.moveToFirst())
+                assertTrue(c.getLong(0) > 0L)
+            }
+        }
+    }
+
     private fun createV4Schema(db: SupportSQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS `articles` (" +

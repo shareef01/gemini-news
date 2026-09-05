@@ -25,12 +25,15 @@ interface NewsDao {
     @Query("DELETE FROM cached_articles WHERE category = :category")
     suspend fun deleteCachedArticlesByCategory(category: String)
 
-    @Query("DELETE FROM cached_articles WHERE publishedAt < :cutoff")
-    suspend fun deleteCachedArticlesOlderThan(cutoff: String)
+    @Query("SELECT MIN(cachedAt) FROM cached_articles WHERE category = :category")
+    suspend fun getOldestCachedAt(category: String): Long?
+
+    @Query("DELETE FROM cached_articles WHERE cachedAt < :cutoffEpochMs")
+    suspend fun deleteCachedArticlesOlderThan(cutoffEpochMs: Long)
 
     @Transaction
-    suspend fun replaceCachedArticles(category: String, articles: List<CachedArticleEntity>, cutoff: String) {
-        deleteCachedArticlesOlderThan(cutoff)
+    suspend fun replaceCachedArticles(category: String, articles: List<CachedArticleEntity>, cutoffEpochMs: Long) {
+        deleteCachedArticlesOlderThan(cutoffEpochMs)
         deleteCachedArticlesByCategory(category)
         insertCachedArticles(articles)
     }

@@ -61,4 +61,28 @@ class DeepLinkParseTest {
     fun `blank search segment is ignored`() {
         assertNull(parseNewsDeepLink("newsapp", "search", "   "))
     }
+
+    @Test
+    fun `unknown category is rejected`() {
+        assertNull(parseNewsDeepLink("newsapp", "category", "admin"))
+    }
+
+    @Test
+    fun `oversized search query is rejected`() {
+        assertNull(parseNewsDeepLink("newsapp", "search", "a".repeat(201)))
+    }
+
+    @Test
+    fun `article deep link accepts only a valid web url`() {
+        assertTrue(
+            parseNewsDeepLink(
+                "newsapp",
+                "article",
+                null,
+                "https://news.example/story"
+            ) is NewsDeepLink.Article
+        )
+        assertNull(parseNewsDeepLink("newsapp", "article", null, "javascript:alert(1)"))
+        assertNull(parseNewsDeepLink("newsapp", "article", null, "https://"))
+    }
 }

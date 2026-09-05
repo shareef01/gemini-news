@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         HistoryArticleEntity::class,
         AiResultEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,6 +40,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v6: records cache fetch time separately from publisher publication time. */
+        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `cached_articles` ADD COLUMN `cachedAt` INTEGER NOT NULL DEFAULT 0")
+                // Existing rows have unknown age. Preserve them as usable cache and
+                // establish a conservative baseline until the next successful fetch.
+                db.execSQL("UPDATE `cached_articles` SET `cachedAt` = ${System.currentTimeMillis()} WHERE `cachedAt` = 0")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -50,7 +60,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "news_database"
                 )
-                .addMigrations(MIGRATION_4_5)
+                .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
                 .build()
                 INSTANCE = instance
                 instance

@@ -6,6 +6,7 @@ import java.net.URLDecoder
 sealed class NewsDeepLink {
     data class Category(val name: String) : NewsDeepLink()
     data class Search(val query: String) : NewsDeepLink()
+    data class Article(val url: String) : NewsDeepLink()
 }
 
 /**
@@ -15,13 +16,14 @@ sealed class NewsDeepLink {
 fun parseNewsDeepLink(
     scheme: String?,
     host: String?,
-    lastPathSegment: String?
+    lastPathSegment: String?,
+    articleUrl: String? = null
 ): NewsDeepLink? {
     if (scheme != "newsapp" || host.isNullOrBlank()) return null
     return when (host) {
         "category" -> {
             val category = lastPathSegment?.takeIf { it.isNotBlank() } ?: return null
-            NewsDeepLink.Category(category)
+            category.takeIf { it in SUPPORTED_CATEGORIES }?.let(NewsDeepLink::Category)
         }
         "search" -> {
             val raw = lastPathSegment?.takeIf { it.isNotBlank() } ?: return null
@@ -30,8 +32,25 @@ fun parseNewsDeepLink(
             } catch (_: IllegalArgumentException) {
                 return null
             }
-            if (query.isBlank()) null else NewsDeepLink.Search(query)
+            if (query.isBlank() || query.length > MAX_SEARCH_LENGTH) null
+            else NewsDeepLink.Search(query)
         }
+        "article" -> articleUrl?.takeIf(::isSafeArticleLink)?.let(NewsDeepLink::Article)
         else -> null
     }
+}
+
+private const val MAX_SEARCH_LENGTH = 200
+private val SUPPORTED_CATEGORIES = setOf(
+    "general", "technology", "business", "entertainment", "sports", "science", "health",
+    "for_you", "smart", "bookmarks", "history"
+)
+
+private fun isSafeArticleLink(raw: String): Boolean {
+    if (raw.length > 2_048) return false
+    val uri = runCatching { java.net.URI(raw) }.getOrNull() ?: return false
+    return uri.scheme.lowercase() in setOf("http", "https") &&
+        !uri.host.isNullOrBlank() &&
+        uri.userInfo == null &&
+        uri.port <= 65_535
 }

@@ -8,7 +8,6 @@ import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
-import java.time.Instant
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -24,8 +23,8 @@ private const val CACHE_TTL_DAYS = 7L
 class MissingNewsApiKeyException :
     IOException("NEWS_API_KEY is not configured. Add it to local.properties (or the environment) and rebuild.")
 
-internal fun requireNewsApiKey() {
-    if (BuildConfig.NEWS_API_KEY.isBlank()) throw MissingNewsApiKeyException()
+internal fun requireNewsApiKey(apiKey: String = BuildConfig.NEWS_API_KEY) {
+    if (apiKey.isBlank()) throw MissingNewsApiKeyException()
 }
 
 /** Whether a successful network response should replace the Room feed cache. */
@@ -52,29 +51,38 @@ internal fun shouldOfflineFallbackOnError(error: Throwable): Boolean {
  */
 data class FeedResult(
     val articles: List<Article>,
-    val fromCache: Boolean
+    val fromCache: Boolean,
+    val cachedAt: Long? = null
 )
 
-class NewsRepository(private val newsDao: NewsDao) {
-    private val json = Json {
+private fun createNewsApiService(): NewsApiService {
+    val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
         isLenient = true
         explicitNulls = false
     }
-    private val httpClient = OkHttpClient.Builder()
+    val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
-    private val apiService: NewsApiService by lazy {
-        Retrofit.Builder()
-            .baseUrl("https://newsapi.org/")
-            .client(httpClient)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-            .create(NewsApiService::class.java)
-    }
+    return Retrofit.Builder()
+        .baseUrl("https://newsapi.org/")
+        .client(httpClient)
+        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+        .build()
+        .create(NewsApiService::class.java)
+}
+
+class NewsRepository(
+    private val newsDao: NewsDao,
+    apiService: NewsApiService? = null,
+    private val apiKeyProvider: () -> String = { BuildConfig.NEWS_API_KEY }
+) {
+    // Production keeps the existing Retrofit configuration; tests can provide a
+    // deterministic service and key without network calls or credential state.
+    private val apiService: NewsApiService by lazy { apiService ?: createNewsApiService() }
 
     suspend fun getTopHeadlines(
         category: String? = null,
@@ -85,12 +93,13 @@ class NewsRepository(private val newsDao: NewsDao) {
         val effectiveCategory = category ?: "general"
 
         return try {
-            requireNewsApiKey()
+            val apiKey = apiKeyProvider()
+            requireNewsApiKey(apiKey)
             val response = apiService.getTopHeadlines(
                 country = countryCode,
                 category = effectiveCategory,
                 page = page,
-                apiKey = BuildConfig.NEWS_API_KEY
+                apiKey = apiKey
             )
 
             if (response.status == "error") {
@@ -108,11 +117,12 @@ class NewsRepository(private val newsDao: NewsDao) {
             // empty success payload (NewsAPI can return zero usable articles
             // after filtering [Removed] rows).
             if (shouldReplaceFeedCache(page, category, articles.size)) {
-                val cutoff = Instant.now().minusSeconds(CACHE_TTL_DAYS * 24 * 3600).toString()
+                val fetchedAt = System.currentTimeMillis()
+                val cutoff = fetchedAt - CACHE_TTL_DAYS * 24 * 60 * 60 * 1000
                 newsDao.replaceCachedArticles(
                     category = effectiveCategory,
-                    articles = articles.map { it.toCachedEntity(effectiveCategory) },
-                    cutoff = cutoff
+                    articles = articles.map { it.toCachedEntity(effectiveCategory, fetchedAt) },
+                    cutoffEpochMs = cutoff
                 )
             }
 
@@ -128,7 +138,11 @@ class NewsRepository(private val newsDao: NewsDao) {
             if (page == 1) {
                 val cached = newsDao.getCachedArticles(effectiveCategory)
                 if (cached.isNotEmpty()) {
-                    FeedResult(cached.map { it.toDomain() }, fromCache = true)
+                    FeedResult(
+                        articles = cached.map { it.toDomain() },
+                        fromCache = true,
+                        cachedAt = newsDao.getOldestCachedAt(effectiveCategory)
+                    )
                 } else {
                     throw e
                 }
@@ -139,8 +153,9 @@ class NewsRepository(private val newsDao: NewsDao) {
     }
 
     suspend fun searchNews(query: String, page: Int = 1): List<Article> {
-        requireNewsApiKey()
-        val response = apiService.searchNews(query = query, page = page, apiKey = BuildConfig.NEWS_API_KEY)
+        val apiKey = apiKeyProvider()
+        requireNewsApiKey(apiKey)
+        val response = apiService.searchNews(query = query, page = page, apiKey = apiKey)
         if (response.status == "error") {
             throw IOException(response.message ?: "News API error: ${response.code}")
         }

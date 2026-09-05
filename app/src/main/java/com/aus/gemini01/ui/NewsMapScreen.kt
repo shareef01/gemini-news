@@ -84,20 +84,39 @@ fun NewsMapScreen(
                 )
             }
         } else {
-            GoogleMap(
+            Box(
                 modifier = Modifier
                     .padding(innerPadding)
                     .fillMaxSize(),
-                cameraPositionState = cameraPositionState
             ) {
-                locations.forEach { location ->
-                    Marker(
-                        state = rememberUpdatedMarkerState(position = LatLng(location.latitude, location.longitude)),
-                        title = location.name,
-                        snippet = location.articleTitle,
-                        onInfoWindowClick = {
-                            onArticleClick(location.articleUrl)
-                        }
+                GoogleMap(
+                    modifier = Modifier.fillMaxSize(),
+                    cameraPositionState = cameraPositionState
+                ) {
+                    locations.forEach { location ->
+                        Marker(
+                            state = rememberUpdatedMarkerState(position = LatLng(location.latitude, location.longitude)),
+                            title = location.name,
+                            snippet = location.articleTitle,
+                            onInfoWindowClick = {
+                                onArticleClick(location.articleUrl)
+                            }
+                        )
+                    }
+                }
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(Dimens.spaceM),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                    tonalElevation = 3.dp
+                ) {
+                    Text(
+                        text = "AI-inferred mentions • approximate locations",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = Dimens.spaceM, vertical = Dimens.spaceS)
                     )
                 }
             }

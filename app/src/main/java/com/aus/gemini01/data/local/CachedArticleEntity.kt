@@ -14,10 +14,12 @@ data class CachedArticleEntity(
     val description: String?,
     val urlToImage: String?,
     val publishedAt: String,
-    val content: String?
+    val content: String?,
+    /** Epoch time when this feed row was fetched, independent of publisher time. */
+    val cachedAt: Long
 )
 
-fun Article.toCachedEntity(category: String) = CachedArticleEntity(
+fun Article.toCachedEntity(category: String, cachedAt: Long = System.currentTimeMillis()) = CachedArticleEntity(
     url = url,
     category = category,
     sourceName = source.name,
@@ -26,7 +28,8 @@ fun Article.toCachedEntity(category: String) = CachedArticleEntity(
     description = description,
     urlToImage = urlToImage,
     publishedAt = publishedAt,
-    content = content
+    content = content,
+    cachedAt = cachedAt
 )
 
 fun CachedArticleEntity.toDomain() = Article(

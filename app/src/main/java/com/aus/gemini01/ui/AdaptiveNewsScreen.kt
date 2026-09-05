@@ -47,12 +47,24 @@ fun AdaptiveNewsScreen(
     val readerViewContent by viewModel.readerViewContent.collectAsState()
     val isSpeaking by viewModel.isSpeaking.collectAsState()
     val newsLocations by viewModel.newsLocations.collectAsState()
+    val pendingArticleUrl by viewModel.pendingArticleUrl.collectAsState()
     val chatMessages by viewModel.chatMessages.collectAsState()
     val isChatting by viewModel.isChatting.collectAsState()
 
     var selectedArticleForWeb by rememberSaveable { mutableStateOf<Article?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showChat by rememberSaveable { mutableStateOf(false) }
+
+    // Notification taps may arrive before the feed has loaded. Resolve the
+    // validated URL against loaded NewsAPI/Room data before opening WebView.
+    LaunchedEffect(pendingArticleUrl, uiState) {
+        val pending = pendingArticleUrl ?: return@LaunchedEffect
+        val article = (uiState as? NewsUiState.Success)?.articles?.firstOrNull { it.url == pending }
+            ?: return@LaunchedEffect
+        viewModel.clearPendingArticleUrl()
+        selectedArticleForWeb = article
+        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
+    }
 
     // Logic to decide what goes in the detail pane
     val currentDetailArticle = navigator.currentDestination?.contentKey

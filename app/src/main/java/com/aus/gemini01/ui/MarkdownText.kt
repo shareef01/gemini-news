@@ -160,7 +160,7 @@ fun MarkdownText(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "Sentiment: ${block.extra}",
+                                    text = "AI-assessed tone: ${block.extra}",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = badgeFg

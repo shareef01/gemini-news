@@ -61,6 +61,7 @@ fun NewsListContent(
     val selectedSmartTheme by viewModel.selectedSmartTheme.collectAsState()
     val countryCode by viewModel.countryCode.collectAsState()
     val isServingCached by viewModel.isServingCached.collectAsState()
+    val cachedAt by viewModel.cachedAt.collectAsState()
     val isListening by viewModel.isListening.collectAsState()
     val bookmarks by viewModel.bookmarks.collectAsState()
     val bookmarkedUrls = remember(bookmarks) { bookmarks.map { it.url }.toSet() }
@@ -260,7 +261,8 @@ fun NewsListContent(
                         )
                         Spacer(modifier = Modifier.width(Dimens.spaceM))
                         Text(
-                            "Offline — showing cached headlines",
+                            "Offline — showing cached headlines" +
+                                (cachedAt?.let { " • ${formatCacheAge(it)}" } ?: ""),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -762,6 +764,7 @@ private fun formatTimeAgo(publishedAt: String): String {
         val published = Instant.parse(publishedAt)
         val minutes = Duration.between(published, Instant.now()).toMinutes()
         when {
+            minutes < 0 -> "Future timestamp"
             minutes < 1 -> "Just now"
             minutes < 60 -> "${minutes}m ago"
             else -> {
@@ -771,5 +774,15 @@ private fun formatTimeAgo(publishedAt: String): String {
         }
     } catch (e: Exception) {
         ""
+    }
+}
+
+private fun formatCacheAge(cachedAt: Long): String {
+    val minutes = Duration.between(Instant.ofEpochMilli(cachedAt), Instant.now()).toMinutes()
+    return when {
+        minutes < 1 -> "saved just now"
+        minutes < 60 -> "saved ${minutes}m ago"
+        minutes < 24 * 60 -> "saved ${minutes / 60}h ago"
+        else -> "saved ${minutes / (24 * 60)}d ago"
     }
 }

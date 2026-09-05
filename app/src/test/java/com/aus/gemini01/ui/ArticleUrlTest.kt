@@ -33,4 +33,11 @@ class ArticleUrlTest {
         assertNull(safeArticleUrl("file:///sdcard/x.html"))
         assertNull(safeArticleUrl("intent://scan/#Intent;end"))
     }
+
+    @Test
+    fun `malformed or credential-bearing web urls are rejected`() {
+        assertNull(safeArticleUrl("https://"))
+        assertNull(safeArticleUrl("https://user:password@example.com/story"))
+        assertEquals("https://news.example/story", safeArticleUrl(" https://news.example/story "))
+    }
 }

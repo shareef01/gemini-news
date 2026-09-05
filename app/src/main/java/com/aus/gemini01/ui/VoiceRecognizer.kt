@@ -16,8 +16,10 @@ class VoiceRecognizer(
 ) : RecognitionListener {
 
     private var speechRecognizer: SpeechRecognizer? = null
+    private var isListening = false
 
     fun startListening() {
+        if (isListening) return
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             onStateChange(false)
             onError(SpeechRecognizer.ERROR_CLIENT)
@@ -36,8 +38,10 @@ class VoiceRecognizer(
         }
         try {
             speechRecognizer?.startListening(intent)
+            isListening = true
             onStateChange(true)
         } catch (e: Exception) {
+            isListening = false
             onStateChange(false)
             onError(SpeechRecognizer.ERROR_CLIENT)
         }
@@ -45,15 +49,18 @@ class VoiceRecognizer(
 
     fun stopListening() {
         speechRecognizer?.stopListening()
+        isListening = false
         onStateChange(false)
     }
 
     fun destroy() {
+        isListening = false
         speechRecognizer?.destroy()
         speechRecognizer = null
     }
 
     override fun onResults(results: Bundle?) {
+        isListening = false
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if (!matches.isNullOrEmpty()) {
             onResult(matches[0])
@@ -66,9 +73,11 @@ class VoiceRecognizer(
     override fun onRmsChanged(rmsdB: Float) {}
     override fun onBufferReceived(buffer: ByteArray?) {}
     override fun onEndOfSpeech() {
+        isListening = false
         onStateChange(false)
     }
     override fun onError(error: Int) {
+        isListening = false
         onStateChange(false)
         // Surface recognizer failures (no match, network, busy, etc.) so they
         // reach the user via a snackbar instead of dying silently.

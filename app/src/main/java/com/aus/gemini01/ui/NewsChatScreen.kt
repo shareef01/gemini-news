@@ -86,7 +86,7 @@ fun NewsChatScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Powered by Gemini AI",
+                                text = "Feed context + Gemini knowledge",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -233,7 +233,7 @@ private fun ChatEmptyState(onPromptSelected: (String) -> Unit) {
         )
         Spacer(modifier = Modifier.height(Dimens.spaceS))
         Text(
-            "Ask questions, compare perspectives, and explore today's headlines with Gemini.",
+            "Ask questions about the loaded feed. Gemini may also use general knowledge, so verify important claims with the linked publisher sources.",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant

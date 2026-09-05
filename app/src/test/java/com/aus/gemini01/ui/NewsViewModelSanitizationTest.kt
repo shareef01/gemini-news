@@ -24,4 +24,11 @@ class NewsViewModelSanitizationTest {
         val input = "Breaking: Inflation drops to 2.1% in Europe! See details #finance [link]"
         assertEquals(input, sanitizeForPrompt(input))
     }
+
+    @Test
+    fun `sanitizeForPrompt bounds oversized source fields`() {
+        val sanitized = sanitizeForPrompt("x".repeat(12_001))
+        assertEquals(12_000 + "\n[Source field truncated]".length, sanitized.length)
+        assertEquals("[Source field truncated]", sanitized.substringAfterLast("\n"))
+    }
 }

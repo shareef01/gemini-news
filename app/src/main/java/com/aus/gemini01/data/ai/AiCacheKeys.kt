@@ -17,7 +17,7 @@ const val GEMINI_MODEL_LABEL = "Gemini 3.8 Flash"
  * Bump when a prompt's instructions change in a way that alters the expected
  * output shape - existing cache entries then miss and regenerate once.
  */
-const val AI_PROMPT_VERSION = 3
+const val AI_PROMPT_VERSION = 4
 
 enum class AiFeature(val id: String) {
     SUMMARY("summary"),
@@ -49,17 +49,38 @@ object AiCacheKeys {
     fun summary(articleUrl: String, language: String): String =
         build("summary", articleUrl, language)
 
+    fun summary(articleUrl: String, language: String, evidenceFingerprint: String): String =
+        build("summary", articleUrl, language, evidenceFingerprint)
+
     fun reader(articleUrl: String, language: String): String =
         build("reader", articleUrl, language)
+
+    fun reader(articleUrl: String, language: String, evidenceFingerprint: String): String =
+        build("reader", articleUrl, language, evidenceFingerprint)
 
     fun trends(articleUrls: List<String>, language: String): String =
         build("trends", articleUrls.joinToString("|"), language)
 
+    fun trends(articleUrls: List<String>, language: String, evidenceFingerprints: List<String>): String =
+        build("trends", articleUrls.zip(evidenceFingerprints).joinToString("|") { (url, fingerprint) ->
+            "$url:$fingerprint"
+        }, language)
+
     fun themes(articleUrls: List<String>): String =
         build("themes", articleUrls.joinToString("|"))
 
+    fun themes(articleUrls: List<String>, evidenceFingerprints: List<String>): String =
+        build("themes", articleUrls.zip(evidenceFingerprints).joinToString("|") { (url, fingerprint) ->
+            "$url:$fingerprint"
+        })
+
     fun locations(articleUrls: List<String>): String =
         build("locations", articleUrls.joinToString("|"))
+
+    fun locations(articleUrls: List<String>, evidenceFingerprints: List<String>): String =
+        build("locations", articleUrls.zip(evidenceFingerprints).joinToString("|") { (url, fingerprint) ->
+            "$url:$fingerprint"
+        })
 
     fun stats(historyUrls: List<String>, language: String): String =
         build("stats", historyUrls.joinToString("|"), language)
@@ -67,10 +88,22 @@ object AiCacheKeys {
     fun forYouKeywords(interactionUrls: List<String>): String =
         build("for_you", interactionUrls.joinToString("|"))
 
-    private fun build(kind: String, payload: String, language: String? = null): String {
-        val raw = listOf(GEMINI_MODEL, AI_PROMPT_VERSION.toString(), kind, payload, language ?: "")
-            .joinToString("\u0000")
-        val digest = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray())
-        return digest.joinToString("") { "%02x".format(it) }
+    /** Hashes the actual source fields so a reused URL cannot reuse stale AI prose. */
+    fun articleEvidenceFingerprint(title: String, description: String?, content: String?): String =
+        digest(listOf(title, description.orEmpty(), content.orEmpty()).joinToString("\u0000"))
+
+    private fun build(
+        kind: String,
+        payload: String,
+        language: String? = null,
+        evidenceFingerprint: String = ""
+    ): String {
+        return digest(listOf(GEMINI_MODEL, AI_PROMPT_VERSION.toString(), kind, payload, language ?: "", evidenceFingerprint)
+            .joinToString("\u0000"))
+    }
+
+    private fun digest(raw: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(raw.toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
     }
 }

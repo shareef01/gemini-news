@@ -31,7 +31,7 @@ to this Android package (`com.aus.gemini01`) and your signing certificate SHA-1/
 
 ## Gemini model
 
-Production builds pin `gemini-2.5-flash` (see `GEMINI_MODEL`). Do not switch back
+Production builds pin `gemini-3.8-flash` (see `GEMINI_MODEL`). Do not switch back
 to a `-latest` alias for shipped releases.
 
 ## Device smoke (local Pixel)
