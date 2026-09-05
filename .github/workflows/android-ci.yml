@@ -23,20 +23,20 @@ jobs:
       - name: Unit tests (includes Robolectric Room 4→5 migration)
         run: ./gradlew testDebugUnitTest --stacktrace
         env:
-          NEWS_API_KEY: ci_placeholder_news_key
-          MAPS_API_KEY: ci_placeholder_maps_key
+          NEWS_API_KEY: "ci_placeholder_news_key"
+          MAPS_API_KEY: "ci_placeholder_maps_key"
 
       - name: Lint
         run: ./gradlew lintDebug --stacktrace
         env:
-          NEWS_API_KEY: ci_placeholder_news_key
-          MAPS_API_KEY: ci_placeholder_maps_key
+          NEWS_API_KEY: "ci_placeholder_news_key"
+          MAPS_API_KEY: "ci_placeholder_maps_key"
 
       - name: Assemble debug
         run: ./gradlew assembleDebug --stacktrace
         env:
-          NEWS_API_KEY: ci_placeholder_news_key
-          MAPS_API_KEY: ci_placeholder_maps_key
+          NEWS_API_KEY: "ci_placeholder_news_key"
+          MAPS_API_KEY: "ci_placeholder_maps_key"
 
   instrumented:
     runs-on: ubuntu-latest
@@ -69,8 +69,8 @@ jobs:
           disable-animations: true
           script: ./gradlew connectedDebugAndroidTest --stacktrace
         env:
-          NEWS_API_KEY: ci_placeholder_news_key
-          MAPS_API_KEY: ci_placeholder_maps_key
+          NEWS_API_KEY: "ci_placeholder_news_key"
+          MAPS_API_KEY: "ci_placeholder_maps_key"
 
   release-r8:
     runs-on: ubuntu-latest
@@ -90,8 +90,8 @@ jobs:
       - name: Assemble release (R8, unsigned when no keystore)
         run: ./gradlew assembleRelease --stacktrace
         env:
-          NEWS_API_KEY: ci_placeholder_news_key
-          MAPS_API_KEY: ci_placeholder_maps_key
+          NEWS_API_KEY: "ci_placeholder_news_key"
+          MAPS_API_KEY: "ci_placeholder_maps_key"
 
       - name: Assert release APK excludes App Check debug registrar
         run: |

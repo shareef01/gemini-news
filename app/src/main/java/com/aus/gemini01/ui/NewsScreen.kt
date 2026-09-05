@@ -278,7 +278,7 @@ fun NewsListContent(
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
-                onRefresh = { viewModel.fetchNews() },
+                onRefresh = { viewModel.fetchNews(isUserPull = true) },
                 modifier = Modifier.fillMaxSize()
             ) {
                 AnimatedContent(

@@ -51,7 +51,11 @@ class NewsWorker(
             }
             Result.success()
         } catch (e: Exception) {
-            if (isPermanentNewsWorkerFailure(e)) Result.failure() else Result.retry()
+            if (isPermanentNewsWorkerFailure(e) || runAttemptCount > 3) {
+                Result.failure()
+            } else {
+                Result.retry()
+            }
         }
     }
 }

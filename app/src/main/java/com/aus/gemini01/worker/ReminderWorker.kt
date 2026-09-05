@@ -1,6 +1,7 @@
 package com.aus.gemini01.worker
 
 import android.content.Context
+import android.net.Uri
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.aus.gemini01.data.NewsRepository
@@ -28,12 +29,13 @@ class ReminderWorker(
                     applicationContext,
                     "Catch up on your reading!",
                     "Don't forget to read: ${randomArticle.title}",
-                    notificationId = 1002
+                    notificationId = 1002,
+                    deepLink = Uri.parse("newsapp://category/bookmarks")
                 )
             }
             Result.success()
         } catch (e: Exception) {
-            Result.retry()
+            if (runAttemptCount > 3) Result.failure() else Result.retry()
         }
     }
 }

@@ -183,4 +183,34 @@ class AiResponseParsersTest {
         assertEquals(0, result.skippedLines)
         assertEquals(1, result.locations.size)
     }
+
+    @Test
+    fun `locations - title containing pipe characters is parsed correctly`() {
+        val response = "San Francisco, USA | 37.7749 | -122.4194 | Tech News | AI Milestone | Report | https://example.com/ai"
+
+        val result = parseLocationsResponse(response)
+
+        assertEquals(0, result.skippedLines)
+        assertEquals(1, result.locations.size)
+        val location = result.locations.first()
+        assertEquals("San Francisco, USA", location.name)
+        assertEquals(37.7749, location.latitude, 0.0001)
+        assertEquals(-122.4194, location.longitude, 0.0001)
+        assertEquals("Tech News | AI Milestone | Report", location.articleTitle)
+        assertEquals("https://example.com/ai", location.articleUrl)
+    }
+
+    @Test
+    fun `locations - blank title or blank url is rejected`() {
+        val response1 = "Paris, France | 48.8566 | 2.3522 |   | https://example.com"
+        val response2 = "Paris, France | 48.8566 | 2.3522 | Title |   "
+
+        val result1 = parseLocationsResponse(response1)
+        val result2 = parseLocationsResponse(response2)
+
+        assertEquals(1, result1.skippedLines)
+        assertTrue(result1.locations.isEmpty())
+        assertEquals(1, result2.skippedLines)
+        assertTrue(result2.locations.isEmpty())
+    }
 }

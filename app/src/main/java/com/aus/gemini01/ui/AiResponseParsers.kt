@@ -73,8 +73,10 @@ internal fun parseLocationsResponse(responseText: String): LocationParseResult {
         val name = parts[0]
         val lat = parts[1].toDoubleOrNull()
         val lng = parts[2].toDoubleOrNull()
+        val url = parts.last()
+        val title = parts.subList(3, parts.size - 1).joinToString(" | ")
 
-        if (name.isBlank() || lat == null || lng == null) {
+        if (name.isBlank() || lat == null || lng == null || title.isBlank() || url.isBlank()) {
             skipped++
             return@forEach
         }
@@ -84,7 +86,7 @@ internal fun parseLocationsResponse(responseText: String): LocationParseResult {
             return@forEach
         }
 
-        locations.add(NewsLocation(name, lat, lng, parts[3], parts[4]))
+        locations.add(NewsLocation(name, lat, lng, title, url))
     }
 
     return LocationParseResult(locations, skipped)

@@ -18,6 +18,12 @@ class VoiceRecognizer(
     private var speechRecognizer: SpeechRecognizer? = null
 
     fun startListening() {
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            onStateChange(false)
+            onError(SpeechRecognizer.ERROR_CLIENT)
+            return
+        }
+
         if (speechRecognizer == null) {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
                 setRecognitionListener(this@VoiceRecognizer)
@@ -28,8 +34,13 @@ class VoiceRecognizer(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
         }
-        speechRecognizer?.startListening(intent)
-        onStateChange(true)
+        try {
+            speechRecognizer?.startListening(intent)
+            onStateChange(true)
+        } catch (e: Exception) {
+            onStateChange(false)
+            onError(SpeechRecognizer.ERROR_CLIENT)
+        }
     }
 
     fun stopListening() {
