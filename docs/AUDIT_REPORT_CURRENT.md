@@ -145,6 +145,7 @@ Feed pagination uses stable URL keys and deduplicates overlapping pages. AI requ
 - Room migration tests prove 5→6 cache timestamps are added and backfilled.
 - AI single-flight tests prove concurrent waiters produce one request and one cache-miss diagnostic.
 - NewsAPI repository tests use the injected service boundary to verify query/key forwarding, unusable-row filtering, and user-facing error sanitization without network access.
+- Device tests cover production activity launch, hostile/valid article deep links, and the Room 5→6 migration on a Pixel 7.
 
 ## Final validation
 
@@ -153,7 +154,7 @@ Feed pagination uses stable URL keys and deduplicates overlapping pages. AI requ
 | `./gradlew.bat testDebugUnitTest` | PASS | 113 unit tests passed after final changes |
 | `./gradlew.bat lintDebug` | PASS | Debug lint completed successfully |
 | `./gradlew.bat assembleDebug` | PASS | Debug APK packaged successfully |
-| `./gradlew.bat connectedDebugAndroidTest` | PASS | 2 instrumented tests passed on connected Pixel 7 (API 36) |
+| `./gradlew.bat connectedDebugAndroidTest` | PASS | 6 instrumented tests passed on connected Pixel 7 (API 36), including launch/deep-link smoke and Room 5→6 backfill |
 | Debug APK install + launch smoke | PASS | Installed on connected Pixel 7; `MainActivity` resumed and the UI accessibility tree was available; no app crash was logged |
 
 ## Remaining P0/P1 issues
@@ -163,7 +164,7 @@ No P0 issue was verified. No unresolved P1 implementation defect was confirmed i
 ## Environment limitations
 
 - No authenticated live Gemini or NewsAPI calls were made.
-- Instrumentation and a debug APK launch smoke ran on a connected Pixel 7; the suite currently covers package smoke and Room migration. TalkBack, WebView, TTS, voice, Maps, notification delivery, and foldable/tablet behavior were not covered by existing instrumented tests.
+- Instrumentation and a debug APK launch smoke ran on a connected Pixel 7; the suite covers package smoke, production activity/deep-link launch, and Room migration. TalkBack, WebView, TTS, voice, Maps, notification delivery, and foldable/tablet behavior were not covered by these instrumented tests.
 - The documented personal/portfolio key threat model remains unchanged; APK key extraction is still possible.
 
 ## Deferred improvements
@@ -185,4 +186,4 @@ Scores are code-and-test confidence estimates, not claims of production readines
 | AI correctness | 6 | 8 | Evidence-aware cache invalidation and bounded/sanitized prompts |
 | Security/privacy confidence | 7 | 8 | Reduced WebView surface and validated external inputs |
 | Performance | 7 | 8 | Shared AI work no longer races telemetry or inflates miss counts |
-| Test confidence | 7 | 8 | 113 unit tests plus 2 connected-device tests pass |
+| Test confidence | 7 | 8 | 113 unit tests plus 6 connected-device tests pass |

@@ -16,6 +16,7 @@ import org.junit.runner.RunWith
 class AppDatabaseMigration4To5Test {
 
     private val testDb = "migration-test-news"
+    private val cacheMigrationDb = "migration-test-news-cache"
 
     @get:Rule
     val helper = MigrationTestHelper(
@@ -56,6 +57,37 @@ class AppDatabaseMigration4To5Test {
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='ai_results'"
             ).use { c ->
                 assert(c.moveToFirst())
+            }
+            close()
+        }
+    }
+
+    @Test
+    fun migrate5To6_addsAndBackfillsCacheTimestamp() {
+        helper.createDatabase(cacheMigrationDb, 5).apply {
+            execSQL(
+                """
+                INSERT INTO cached_articles (
+                    url, category, sourceName, author, title, description,
+                    urlToImage, publishedAt, content
+                ) VALUES (
+                    'https://example.com/cached', 'general', 'Src', NULL, 'Cached',
+                    NULL, NULL, '2026-01-01T00:00:00Z', NULL
+                )
+                """.trimIndent()
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(
+            cacheMigrationDb,
+            6,
+            true,
+            AppDatabase.MIGRATION_5_6
+        ).apply {
+            query("SELECT cachedAt FROM cached_articles WHERE url = 'https://example.com/cached'").use { c ->
+                assert(c.moveToFirst())
+                assert(c.getLong(0) > 0L)
             }
             close()
         }
