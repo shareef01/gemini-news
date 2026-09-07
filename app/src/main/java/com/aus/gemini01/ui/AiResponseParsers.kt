@@ -56,37 +56,72 @@ internal data class LocationParseResult(
     val skippedLines: Int
 )
 
-internal fun parseLocationsResponse(responseText: String): LocationParseResult {
+/**
+ * Parses Gemini location lines of the form:
+ * `ARTICLE_INDEX|LOCATION_NAME|LATITUDE|LONGITUDE`
+ *
+ * Indexes are **zero-based** into [articles]. Title and URL are taken only from
+ * the source article — model output never supplies authoritative identity.
+ * Malformed rows are skipped; finite coordinates in valid ranges are required.
+ */
+internal fun parseLocationsResponse(
+    responseText: String,
+    articles: List<Article>,
+    maxLocations: Int = 15
+): LocationParseResult {
     val locations = mutableListOf<NewsLocation>()
     var skipped = 0
+    val seenKeys = mutableSetOf<String>()
 
     responseText.lines().forEach { rawLine ->
+        if (locations.size >= maxLocations) return@forEach
+
         val line = rawLine.trim()
         if (line.isBlank()) return@forEach
 
         val parts = line.split("|").map { it.trim() }
-        if (parts.size < 5) {
+        if (parts.size < 4) {
             skipped++
             return@forEach
         }
 
-        val name = parts[0]
-        val lat = parts[1].toDoubleOrNull()
-        val lng = parts[2].toDoubleOrNull()
-        val url = parts.last()
-        val title = parts.subList(3, parts.size - 1).joinToString(" | ")
+        val index = parts[0].toIntOrNull()
+        val name = parts[1]
+        val lat = parts[2].toDoubleOrNull()
+        val lng = parts[3].toDoubleOrNull()
 
-        if (name.isBlank() || lat == null || lng == null || title.isBlank() || url.isBlank()) {
+        if (index == null || name.isBlank() || lat == null || lng == null) {
             skipped++
             return@forEach
         }
-
+        if (!lat.isFinite() || !lng.isFinite()) {
+            skipped++
+            return@forEach
+        }
         if (lat !in -90.0..90.0 || lng !in -180.0..180.0) {
             skipped++
             return@forEach
         }
+        if (index < 0 || index >= articles.size) {
+            skipped++
+            return@forEach
+        }
 
-        locations.add(NewsLocation(name, lat, lng, title, url))
+        val article = articles[index]
+        val dedupeKey = "${article.url}|$name|$lat|$lng"
+        if (!seenKeys.add(dedupeKey)) {
+            return@forEach
+        }
+
+        locations.add(
+            NewsLocation(
+                name = name,
+                latitude = lat,
+                longitude = lng,
+                articleTitle = article.title,
+                articleUrl = article.url
+            )
+        )
     }
 
     return LocationParseResult(locations, skipped)

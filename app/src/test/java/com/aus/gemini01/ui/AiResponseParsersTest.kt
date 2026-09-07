@@ -39,10 +39,6 @@ class AiResponseParsersTest {
 
     @Test
     fun `smart themes - theme name with colon is not in spec but parser handles gracefully`() {
-        // The spec only allows "Theme Name: index, index" with a single colon.
-        // If Gemini emits a name with a colon (e.g. "AI: Regulation"), only the
-        // part before the first colon is treated as the name, and the rest is
-        // expected to be indices. Since it won't parse, the line is skipped.
         val articles = listOf(article(0))
         val response = "AI: Regulation: 0"
 
@@ -118,99 +114,119 @@ class AiResponseParsersTest {
     }
 
     @Test
-    fun `locations - parses well-formed lines`() {
+    fun `locations - maps index to original article identity`() {
+        val articles = listOf(article(0, "Olympics Begin"), article(1, "Election News"))
         val response = """
-            Paris, France | 48.8566 | 2.3522 | Olympics Begin | https://example.com/olympics
-            Tokyo, Japan | 35.6762 | 139.6503 | Election News | https://example.com/election
+            0|Paris, France|48.8566|2.3522
+            1|Tokyo, Japan|35.6762|139.6503
         """.trimIndent()
 
-        val result = parseLocationsResponse(response)
+        val result = parseLocationsResponse(response, articles)
 
         assertEquals(0, result.skippedLines)
         assertEquals(2, result.locations.size)
         assertEquals("Paris, France", result.locations[0].name)
         assertEquals(48.8566, result.locations[0].latitude, 0.0001)
         assertEquals(2.3522, result.locations[0].longitude, 0.0001)
-        assertEquals("https://example.com/olympics", result.locations[0].articleUrl)
+        assertEquals("Olympics Begin", result.locations[0].articleTitle)
+        assertEquals("https://example.com/0", result.locations[0].articleUrl)
+        assertEquals(articles[1].url, result.locations[1].articleUrl)
+        assertEquals(articles[1].title, result.locations[1].articleTitle)
     }
 
     @Test
-    fun `locations - too few fields is skipped`() {
-        val response = "Paris | 48.8566 | 2.3522"
-
-        val result = parseLocationsResponse(response)
-
+    fun `locations - negative index skipped`() {
+        val articles = listOf(article(0))
+        val result = parseLocationsResponse("-1|Paris|48.8|2.3", articles)
         assertEquals(1, result.skippedLines)
         assertTrue(result.locations.isEmpty())
     }
 
     @Test
-    fun `locations - non-numeric coords are skipped`() {
-        val response = "Paris, France | not-a-number | 2.3522 | Title | https://example.com"
-
-        val result = parseLocationsResponse(response)
-
+    fun `locations - huge index skipped`() {
+        val articles = listOf(article(0))
+        val result = parseLocationsResponse("999|Paris|48.8|2.3", articles)
         assertEquals(1, result.skippedLines)
         assertTrue(result.locations.isEmpty())
     }
 
     @Test
-    fun `locations - out of range coordinates are rejected`() {
-        val response = "Bad | 200.0 | 0.0 | Title | https://example.com"
-
-        val result = parseLocationsResponse(response)
-
+    fun `locations - nonnumeric index skipped`() {
+        val articles = listOf(article(0))
+        val result = parseLocationsResponse("abc|Paris|48.8|2.3", articles)
         assertEquals(1, result.skippedLines)
         assertTrue(result.locations.isEmpty())
     }
 
     @Test
-    fun `locations - blank name is skipped`() {
-        val response = "  | 48.8566 | 2.3522 | Title | https://example.com"
+    fun `locations - duplicate index location ignored`() {
+        val articles = listOf(article(0))
+        val response = """
+            0|Paris|48.8|2.3
+            0|Paris|48.8|2.3
+        """.trimIndent()
+        val result = parseLocationsResponse(response, articles)
+        assertEquals(1, result.locations.size)
+    }
 
-        val result = parseLocationsResponse(response)
-
+    @Test
+    fun `locations - malformed latitude skipped`() {
+        val articles = listOf(article(0))
+        val result = parseLocationsResponse("0|Paris|not-a-number|2.3", articles)
         assertEquals(1, result.skippedLines)
         assertTrue(result.locations.isEmpty())
     }
 
     @Test
-    fun `locations - blank lines are ignored not skipped`() {
-        val response = "\n\nParis, France | 48.8566 | 2.3522 | Title | https://example.com\n\n"
+    fun `locations - NaN and infinity skipped`() {
+        val articles = listOf(article(0))
+        assertEquals(1, parseLocationsResponse("0|Paris|NaN|2.3", articles).skippedLines)
+        assertEquals(1, parseLocationsResponse("0|Paris|Infinity|2.3", articles).skippedLines)
+        assertTrue(parseLocationsResponse("0|Paris|NaN|2.3", articles).locations.isEmpty())
+    }
 
-        val result = parseLocationsResponse(response)
+    @Test
+    fun `locations - out of range coordinates rejected`() {
+        val articles = listOf(article(0))
+        val result = parseLocationsResponse("0|Bad|200.0|0.0", articles)
+        assertEquals(1, result.skippedLines)
+        assertTrue(result.locations.isEmpty())
+    }
 
+    @Test
+    fun `locations - model URL or title fields do not become authority`() {
+        val articles = listOf(article(0, "Real Title"))
+        // Extra trailing fields (URL/title attempts) are ignored; identity stays source.
+        val result = parseLocationsResponse(
+            "0|Paris|48.8|2.3|Fake Title|https://evil.example/hijack",
+            articles
+        )
+        assertEquals(1, result.locations.size)
+        assertEquals("Real Title", result.locations[0].articleTitle)
+        assertEquals("https://example.com/0", result.locations[0].articleUrl)
+    }
+
+    @Test
+    fun `locations - too few fields skipped`() {
+        val articles = listOf(article(0))
+        val result = parseLocationsResponse("0|Paris|48.8", articles)
+        assertEquals(1, result.skippedLines)
+        assertTrue(result.locations.isEmpty())
+    }
+
+    @Test
+    fun `locations - blank lines ignored not skipped`() {
+        val articles = listOf(article(0))
+        val result = parseLocationsResponse("\n\n0|Paris|48.8|2.3\n\n", articles)
         assertEquals(0, result.skippedLines)
         assertEquals(1, result.locations.size)
     }
 
     @Test
-    fun `locations - title containing pipe characters is parsed correctly`() {
-        val response = "San Francisco, USA | 37.7749 | -122.4194 | Tech News | AI Milestone | Report | https://example.com/ai"
-
-        val result = parseLocationsResponse(response)
-
-        assertEquals(0, result.skippedLines)
-        assertEquals(1, result.locations.size)
-        val location = result.locations.first()
-        assertEquals("San Francisco, USA", location.name)
-        assertEquals(37.7749, location.latitude, 0.0001)
-        assertEquals(-122.4194, location.longitude, 0.0001)
-        assertEquals("Tech News | AI Milestone | Report", location.articleTitle)
-        assertEquals("https://example.com/ai", location.articleUrl)
-    }
-
-    @Test
-    fun `locations - blank title or blank url is rejected`() {
-        val response1 = "Paris, France | 48.8566 | 2.3522 |   | https://example.com"
-        val response2 = "Paris, France | 48.8566 | 2.3522 | Title |   "
-
-        val result1 = parseLocationsResponse(response1)
-        val result2 = parseLocationsResponse(response2)
-
-        assertEquals(1, result1.skippedLines)
-        assertTrue(result1.locations.isEmpty())
-        assertEquals(1, result2.skippedLines)
-        assertTrue(result2.locations.isEmpty())
+    fun `locations - unknown garbage lines skipped`() {
+        val articles = listOf(article(0))
+        val result = parseLocationsResponse("hello world", articles)
+        assertEquals(1, result.skippedLines)
+        assertTrue(result.locations.isEmpty())
     }
 }

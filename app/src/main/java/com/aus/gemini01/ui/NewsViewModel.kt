@@ -1025,27 +1025,36 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         analysisJob?.cancel()
         analysisJob = viewModelScope.launch {
             try {
-                val titlesWithUrl = currentArticles.take(15).joinToString("\n") { "${sanitizeForPrompt(it.title)} | ${it.url}" }
+                val indexedArticles = currentArticles.take(15)
+                val titlesWithIndex = indexedArticles.mapIndexed { index, article ->
+                    "$index | ${sanitizeForPrompt(article.title)}"
+                }.joinToString("\n")
                 val prompt = """
                     $PROMPT_INJECTION_GUARD
 
                     For each news article below, identify its primary geographical location (City, Country).
-                    Return the result as a list where each line follows this exact format:
-                    Location Name | Latitude | Longitude | Article Title | Article URL
-                    
-                    Example: Paris, France | 48.8566 | 2.3522 | Olympics Begin in Paris | https://example.com/olympics
-                    
+                    Articles are numbered with ZERO-BASED indexes. Return one line per location using this exact format:
+                    ARTICLE_INDEX|LOCATION_NAME|LATITUDE|LONGITUDE
+
+                    Example: 0|Paris, France|48.8566|2.3522
+
+                    Rules:
+                    - ARTICLE_INDEX must be an integer from the list below (0-based).
+                    - Do NOT invent or copy article URLs or titles.
+                    - Do NOT put URLs or titles in any field.
+                    - Skip articles with no clear geographic location.
+
                     Articles:
 
                     [[DATA]]
-                    $titlesWithUrl
+                    $titlesWithIndex
                     [[/DATA]]
                 """.trimIndent()
 
                 val responseText = aiRepository.cachedOrFetch(
                     cacheKey = AiCacheKeys.locations(
-                        currentArticles.take(15).map { it.url },
-                        currentArticles.take(15).map {
+                        indexedArticles.map { it.url },
+                        indexedArticles.map {
                             AiCacheKeys.articleEvidenceFingerprint(it.title, it.description, it.content)
                         }
                     ),
@@ -1054,7 +1063,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                     withTimeout(90_000) { generativeModel.generateContent(prompt) }.text ?: ""
                 }
 
-                val parseResult = parseLocationsResponse(responseText)
+                val parseResult = parseLocationsResponse(responseText, indexedArticles)
                 _newsLocations.value = parseResult.locations
 
                 if (parseResult.locations.isEmpty() && parseResult.skippedLines > 0) {
