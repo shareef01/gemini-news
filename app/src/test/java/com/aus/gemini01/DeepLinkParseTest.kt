@@ -4,62 +4,78 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.net.URI
-import java.net.URISyntaxException
 
 /**
  * Exercises the shared [parseNewsDeepLink] helper used by MainActivity.
- * Hostile / malformed inputs must not throw into the caller.
+ * Inputs are treated as already decoded once (Android Uri semantics).
  */
 class DeepLinkParseTest {
 
-    private fun parse(uriString: String): NewsDeepLink? {
-        val uri = try {
-            URI(uriString)
-        } catch (_: URISyntaxException) {
-            return null
-        }
-        val lastSegment = uri.path
-            ?.trim('/')
-            ?.takeIf { it.isNotEmpty() }
-            ?.substringAfterLast('/')
-        return parseNewsDeepLink(uri.scheme, uri.host, lastSegment)
-    }
-
     @Test
     fun `valid category deep link`() {
-        val link = parse("newsapp://category/technology")
+        val link = parseNewsDeepLink("newsapp", "category", "technology")
         assertTrue(link is NewsDeepLink.Category)
         assertEquals("technology", (link as NewsDeepLink.Category).name)
     }
 
     @Test
-    fun `search query is decoded`() {
-        val link = parse("newsapp://search/climate%20change")
+    fun `search query keeps spaces from decoded segment`() {
+        val link = parseNewsDeepLink("newsapp", "search", "climate change")
         assertTrue(link is NewsDeepLink.Search)
         assertEquals("climate change", (link as NewsDeepLink.Search).query)
     }
 
     @Test
-    fun `malformed percent encoding yields null`() {
-        // java.net.URI may reject bad encodings at parse time; either outcome
-        // (null link) is acceptable as long as we don't throw.
-        assertNull(parse("newsapp://search/%ZZ"))
+    fun `literal plus is preserved not treated as space`() {
+        val link = parseNewsDeepLink("newsapp", "search", "C++")
+        assertTrue(link is NewsDeepLink.Search)
+        assertEquals("C++", (link as NewsDeepLink.Search).query)
     }
 
     @Test
-    fun `empty scheme path is harmless`() {
-        assertNull(parse("newsapp://"))
+    fun `percent25 remains percent after single decode`() {
+        // Android Uri would decode %2525 -> %25 once; parser must not decode again.
+        val link = parseNewsDeepLink("newsapp", "search", "%25")
+        assertTrue(link is NewsDeepLink.Search)
+        assertEquals("%25", (link as NewsDeepLink.Search).query)
     }
 
     @Test
-    fun `javascript scheme is ignored`() {
-        assertNull(parse("javascript:alert(1)"))
+    fun `unicode and emoji accepted`() {
+        val link = parseNewsDeepLink("newsapp", "search", "東京 📰")
+        assertTrue(link is NewsDeepLink.Search)
+        assertEquals("東京 📰", (link as NewsDeepLink.Search).query)
     }
 
     @Test
-    fun `blank search segment is ignored`() {
+    fun `encoded path separator style segment is accepted as literal text`() {
+        val link = parseNewsDeepLink("newsapp", "search", "a/b")
+        assertTrue(link is NewsDeepLink.Search)
+        assertEquals("a/b", (link as NewsDeepLink.Search).query)
+    }
+
+    @Test
+    fun `empty query rejected`() {
+        assertNull(parseNewsDeepLink("newsapp", "search", ""))
         assertNull(parseNewsDeepLink("newsapp", "search", "   "))
+    }
+
+    @Test
+    fun `max accepted length allowed`() {
+        val query = "a".repeat(200)
+        val link = parseNewsDeepLink("newsapp", "search", query)
+        assertTrue(link is NewsDeepLink.Search)
+        assertEquals(query, (link as NewsDeepLink.Search).query)
+    }
+
+    @Test
+    fun `oversized search query is rejected`() {
+        assertNull(parseNewsDeepLink("newsapp", "search", "a".repeat(201)))
+    }
+
+    @Test
+    fun `unknown host fails closed`() {
+        assertNull(parseNewsDeepLink("newsapp", "admin", "x"))
     }
 
     @Test
@@ -68,8 +84,14 @@ class DeepLinkParseTest {
     }
 
     @Test
-    fun `oversized search query is rejected`() {
-        assertNull(parseNewsDeepLink("newsapp", "search", "a".repeat(201)))
+    fun `javascript scheme is ignored`() {
+        assertNull(parseNewsDeepLink("javascript", "alert", "1"))
+    }
+
+    @Test
+    fun `empty host is ignored`() {
+        assertNull(parseNewsDeepLink("newsapp", "", "technology"))
+        assertNull(parseNewsDeepLink("newsapp", null, "technology"))
     }
 
     @Test
@@ -84,5 +106,7 @@ class DeepLinkParseTest {
         )
         assertNull(parseNewsDeepLink("newsapp", "article", null, "javascript:alert(1)"))
         assertNull(parseNewsDeepLink("newsapp", "article", null, "https://"))
+        assertNull(parseNewsDeepLink("newsapp", "article", null, "file:///etc/passwd"))
+        assertNull(parseNewsDeepLink("newsapp", "article", null, "http://user:pass@evil.test/"))
     }
 }

@@ -1,8 +1,10 @@
 package com.aus.gemini01
 
-import java.net.URLDecoder
-
-/** Parsed `newsapp://` deep link targets. */
+/**
+ * Parsed deep-link targets used by explicit MainActivity intents
+ * (shortcuts, notifications). There is no public BROWSABLE custom-scheme
+ * intent filter — external apps cannot launch these routes via URI alone.
+ */
 sealed class NewsDeepLink {
     data class Category(val name: String) : NewsDeepLink()
     data class Search(val query: String) : NewsDeepLink()
@@ -11,7 +13,14 @@ sealed class NewsDeepLink {
 
 /**
  * Pure deep-link parsing shared by MainActivity and unit tests.
- * Returns null for unknown hosts, empty paths, or malformed encoding.
+ *
+ * [lastPathSegment] and [articleUrl] must already be decoded exactly once
+ * (Android [android.net.Uri.getLastPathSegment] / [android.net.Uri.getQueryParameter]).
+ * This function does **not** apply a second [java.net.URLDecoder] pass — doing so
+ * would turn `%2525` into `%` and treat `+` as a space (form-urlencoded semantics
+ * that URI path segments do not use).
+ *
+ * Returns null for unknown hosts, empty paths, or invalid article URLs.
  */
 fun parseNewsDeepLink(
     scheme: String?,
@@ -26,13 +35,8 @@ fun parseNewsDeepLink(
             category.takeIf { it in SUPPORTED_CATEGORIES }?.let(NewsDeepLink::Category)
         }
         "search" -> {
-            val raw = lastPathSegment?.takeIf { it.isNotBlank() } ?: return null
-            val query = try {
-                URLDecoder.decode(raw, "UTF-8")
-            } catch (_: IllegalArgumentException) {
-                return null
-            }
-            if (query.isBlank() || query.length > MAX_SEARCH_LENGTH) null
+            val query = lastPathSegment?.takeIf { it.isNotBlank() } ?: return null
+            if (query.length > MAX_SEARCH_LENGTH) null
             else NewsDeepLink.Search(query)
         }
         "article" -> articleUrl?.takeIf(::isSafeArticleLink)?.let(NewsDeepLink::Article)

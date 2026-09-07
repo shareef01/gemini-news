@@ -30,12 +30,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="newsapp" />
-            </intent-filter>
+            <!--
+              No public BROWSABLE newsapp:// filter. Shortcuts and notifications
+              use explicit MainActivity intents; custom-scheme URIs are not a
+              verified Android App Links surface and must not be externally openable.
+            -->
 
             <meta-data android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
