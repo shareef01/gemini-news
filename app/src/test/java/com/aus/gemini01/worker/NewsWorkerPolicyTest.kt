@@ -1,9 +1,12 @@
 package com.aus.gemini01.worker
 
 import com.aus.gemini01.data.MissingNewsApiKeyException
+import com.aus.gemini01.data.NewsProviderException
+import kotlinx.coroutines.CancellationException
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import retrofit2.HttpException
 import retrofit2.Response
@@ -19,6 +22,11 @@ class NewsWorkerPolicyTest {
     @Test
     fun `missing api key is permanent failure`() {
         assertTrue(isPermanentNewsWorkerFailure(MissingNewsApiKeyException()))
+    }
+
+    @Test
+    fun `provider status error is permanent failure`() {
+        assertTrue(isPermanentNewsWorkerFailure(NewsProviderException("apiKeyInvalid")))
     }
 
     @Test
@@ -42,5 +50,26 @@ class NewsWorkerPolicyTest {
     @Test
     fun `generic_io_may_retry`() {
         assertFalse(isPermanentNewsWorkerFailure(java.io.IOException("offline")))
+    }
+
+    @Test
+    fun `cancellation_must_not_be_classified_as_retry_or_failure`() {
+        try {
+            newsWorkerResultForFailure(CancellationException("stopped"), runAttemptCount = 1)
+            fail("Expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
+    fun `transient_failure_retries_before_attempt_cap`() {
+        val result = newsWorkerResultForFailure(java.io.IOException("offline"), runAttemptCount = 1)
+        assertTrue(result is androidx.work.ListenableWorker.Result.Retry)
+    }
+
+    @Test
+    fun `transient_failure_fails_after_attempt_cap`() {
+        val result = newsWorkerResultForFailure(java.io.IOException("offline"), runAttemptCount = 4)
+        assertTrue(result is androidx.work.ListenableWorker.Result.Failure)
     }
 }

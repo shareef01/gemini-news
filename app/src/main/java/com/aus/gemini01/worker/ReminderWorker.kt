@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import com.aus.gemini01.data.NewsRepository
 import com.aus.gemini01.data.local.AppDatabase
 import com.aus.gemini01.ui.NotificationHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 class ReminderWorker(
@@ -20,11 +21,11 @@ class ReminderWorker(
 
         return try {
             val bookmarks = newsRepository.getAllBookmarks().first()
-            
+
             if (bookmarks.isNotEmpty()) {
                 val randomArticle = bookmarks.random()
-                
-                // Reuse existing notification logic but with a specific deep link for bookmarks
+
+                // Explicit MainActivity intent with URI data — not a public BROWSABLE route.
                 NotificationHelper.showNotification(
                     applicationContext,
                     "Catch up on your reading!",
@@ -34,6 +35,8 @@ class ReminderWorker(
                 )
             }
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (runAttemptCount > 3) Result.failure() else Result.retry()
         }

@@ -7,6 +7,7 @@ import com.aus.gemini01.data.NewsRepository
 import com.aus.gemini01.data.SettingsRepository
 import com.aus.gemini01.data.local.AppDatabase
 import com.aus.gemini01.ui.NotificationHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 class NewsWorker(
@@ -51,12 +52,11 @@ class NewsWorker(
                 }
             }
             Result.success()
+        } catch (e: CancellationException) {
+            // WorkManager stop/cancellation must not become retry or failure.
+            throw e
         } catch (e: Exception) {
-            if (isPermanentNewsWorkerFailure(e) || runAttemptCount > 3) {
-                Result.failure()
-            } else {
-                Result.retry()
-            }
+            newsWorkerResultForFailure(e, runAttemptCount)
         }
     }
 }
