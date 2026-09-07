@@ -10,6 +10,8 @@ fun newsFeedErrorMessage(error: Throwable): String {
     return when {
         error is MissingNewsApiKeyException ->
             "News API key is not configured. Add NEWS_API_KEY to local.properties and rebuild."
+        error is NewsProviderException ->
+            "Couldn't refresh the news feed. Check the API configuration and try again."
         http?.code() == 429 ->
             "NewsAPI rate limit reached. Your cached stories are unchanged — try again later."
         http != null && http.code() in 400..499 ->
@@ -27,6 +29,7 @@ fun newsFeedErrorMessage(error: Throwable): String {
  * failures with [newsFeedErrorMessage] instead of a generic AI snag copy.
  */
 fun feedOrAiErrorMessage(error: Throwable): String = when (error) {
-    is MissingNewsApiKeyException, is HttpException, is IOException -> newsFeedErrorMessage(error)
+    is MissingNewsApiKeyException, is NewsProviderException, is HttpException, is IOException ->
+        newsFeedErrorMessage(error)
     else -> "This AI feature hit a snag. Please try again."
 }

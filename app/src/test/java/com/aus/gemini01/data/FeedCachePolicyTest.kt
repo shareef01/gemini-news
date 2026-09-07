@@ -50,6 +50,31 @@ class FeedCachePolicyTest {
     }
 
     @Test
+    fun `runtime_exception_does_not_use_offline_fallback`() {
+        assertFalse(shouldOfflineFallbackOnError(IllegalStateException("dao boom")))
+    }
+
+    @Test
+    fun `provider_status_error_does_not_use_offline_fallback`() {
+        assertFalse(shouldOfflineFallbackOnError(NewsProviderException("apiKeyInvalid")))
+    }
+
+    @Test
+    fun `serialization_failure_does_not_use_offline_fallback`() {
+        assertFalse(
+            shouldOfflineFallbackOnError(
+                kotlinx.serialization.SerializationException("bad json")
+            )
+        )
+    }
+
+    @Test
+    fun `http_401_does_not_use_offline_fallback`() {
+        val error = HttpException(Response.error<Unit>(401, "".toResponseBody(null)))
+        assertFalse(shouldOfflineFallbackOnError(error))
+    }
+
+    @Test
     fun `rate_limit_message_is_explicit`() {
         val error = HttpException(Response.error<Unit>(429, "".toResponseBody(null)))
         val msg = newsFeedErrorMessage(error)

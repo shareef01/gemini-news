@@ -4,6 +4,7 @@ import com.aus.gemini01.BuildConfig
 import com.aus.gemini01.data.local.*
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -23,6 +24,12 @@ private const val CACHE_TTL_DAYS = 7L
 class MissingNewsApiKeyException :
     IOException("NEWS_API_KEY is not configured. Add it to local.properties (or the environment) and rebuild.")
 
+/**
+ * NewsAPI application-level failure (`status: "error"`). Not a transport outage —
+ * must not be disguised as a successful offline-cache hit.
+ */
+class NewsProviderException(message: String) : Exception(message)
+
 internal fun requireNewsApiKey(apiKey: String = BuildConfig.NEWS_API_KEY) {
     if (apiKey.isBlank()) throw MissingNewsApiKeyException()
 }
@@ -35,13 +42,27 @@ internal fun shouldReplaceFeedCache(
 ): Boolean = page == 1 && category != "bookmarks" && articleCount > 0
 
 /**
- * HTTP 4xx (including 429) must not be disguised as an offline-cache hit —
- * that misleads users and hides quota pressure.
+ * Explicit taxonomy for when page-1 Room cache may be returned after a failed
+ * live fetch. Cancellation is never handled here — callers rethrow it first.
+ *
+ * Eligible for stale fallback:
+ * - HTTP 5xx
+ * - Genuine network [IOException] (timeouts, DNS, socket) except missing API key
+ *
+ * Not eligible:
+ * - HTTP 4xx (including 429)
+ * - Missing / blank NewsAPI credential
+ * - Provider application-level `status: "error"`
+ * - Local persistence / programmer / serialization failures
  */
-internal fun shouldOfflineFallbackOnError(error: Throwable): Boolean {
-    if (error is MissingNewsApiKeyException) return false
-    val http = error as? HttpException ?: return true
-    return http.code() !in 400..499
+internal fun shouldOfflineFallbackOnError(error: Throwable): Boolean = when (error) {
+    is CancellationException -> false
+    is MissingNewsApiKeyException -> false
+    is NewsProviderException -> false
+    is SerializationException -> false
+    is HttpException -> error.code() !in 400..499
+    is IOException -> true
+    else -> false
 }
 
 /**
@@ -103,7 +124,7 @@ class NewsRepository(
             )
 
             if (response.status == "error") {
-                throw IOException(response.message ?: "News API error: ${response.code}")
+                throw NewsProviderException(response.message ?: "News API error: ${response.code}")
             }
 
             val articles = response.articles.filter {
@@ -157,7 +178,7 @@ class NewsRepository(
         requireNewsApiKey(apiKey)
         val response = apiService.searchNews(query = query, page = page, apiKey = apiKey)
         if (response.status == "error") {
-            throw IOException(response.message ?: "News API error: ${response.code}")
+            throw NewsProviderException(response.message ?: "News API error: ${response.code}")
         }
         return response.articles.filter {
             it.title.isNotBlank() &&
