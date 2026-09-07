@@ -14,14 +14,17 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 class FakeAiResultDao : AiResultDao {
-    private val store = java.util.concurrent.ConcurrentHashMap<String, AiResultEntity>()
+    private val store = ConcurrentHashMap<String, AiResultEntity>()
 
     override suspend fun get(key: String): AiResultEntity? = store[key]
 
@@ -32,8 +35,10 @@ class FakeAiResultDao : AiResultDao {
     override fun countsByKind(): Flow<List<AiKindCount>> =
         flowOf(store.values.groupBy { it.kind }.map { AiKindCount(it.key, it.value.size) })
 
-    override suspend fun deleteOlderThan(cutoffEpochMs: Long): Int {
-        val toRemove = store.entries.filter { it.value.createdAt < cutoffEpochMs }.map { it.key }
+    override suspend fun deleteOlderThanForKind(kind: String, cutoffEpochMs: Long): Int {
+        val toRemove = store.entries
+            .filter { it.value.kind == kind && it.value.createdAt < cutoffEpochMs }
+            .map { it.key }
         toRemove.forEach { store.remove(it) }
         return toRemove.size
     }
@@ -41,6 +46,10 @@ class FakeAiResultDao : AiResultDao {
     override suspend fun clearAll() {
         store.clear()
     }
+
+    fun size(): Int = store.size
+
+    fun all(): Collection<AiResultEntity> = store.values
 }
 
 class FakeAiTelemetry : AiTelemetry {
@@ -79,11 +88,19 @@ class FakeAiTelemetry : AiTelemetry {
 
 class AiRepositoryTest {
 
+    private val fixedNow = AtomicLong(1_700_000_000_000L)
+
+    private fun repository(
+        dao: FakeAiResultDao = FakeAiResultDao(),
+        telemetry: FakeAiTelemetry = FakeAiTelemetry(),
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    ) = AiRepository(dao, telemetry, scope) { fixedNow.get() }
+
     @Test
     fun `cachedOrFetch returns cached result on cache hit without calling fetch`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
-        val repository = AiRepository(dao, telemetry)
+        val repository = repository(dao, telemetry)
 
         dao.insert(
             AiResultEntity(
@@ -91,7 +108,7 @@ class AiRepositoryTest {
                 kind = AiFeature.SUMMARY.id,
                 articleUrl = "https://example.com/1",
                 result = "Cached Summary",
-                createdAt = System.currentTimeMillis()
+                createdAt = fixedNow.get()
             )
         )
 
@@ -112,7 +129,7 @@ class AiRepositoryTest {
     fun `cachedOrFetch calls fetch, inserts into dao, and returns result on cache miss`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
-        val repository = AiRepository(dao, telemetry)
+        val repository = repository(dao, telemetry)
 
         var fetchCalled = false
         val result = repository.cachedOrFetch("key_2", AiFeature.READER, "https://example.com/2") {
@@ -131,7 +148,7 @@ class AiRepositoryTest {
     fun `cachedOrFetch classifies quota error and does not cache failure`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
-        val repository = AiRepository(dao, telemetry)
+        val repository = repository(dao, telemetry)
 
         try {
             repository.cachedOrFetch("key_quota", AiFeature.SUMMARY) {
@@ -150,7 +167,7 @@ class AiRepositoryTest {
     fun `cachedOrFetch classifies network error`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
-        val repository = AiRepository(dao, telemetry)
+        val repository = repository(dao, telemetry)
 
         try {
             repository.cachedOrFetch("key_network", AiFeature.SUMMARY) {
@@ -169,7 +186,7 @@ class AiRepositoryTest {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val repository = AiRepository(dao, telemetry, testScope)
+        val repository = repository(dao, telemetry, testScope)
 
         val fetchCount = AtomicInteger(0)
         val gate = CompletableDeferred<Unit>()
@@ -203,7 +220,7 @@ class AiRepositoryTest {
     fun `recordUncachedRequest executes block and records telemetry`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
-        val repository = AiRepository(dao, telemetry)
+        val repository = repository(dao, telemetry)
 
         val result = repository.recordUncachedRequest(AiFeature.CHAT) {
             "Chat reply"
@@ -227,8 +244,7 @@ class AiRepositoryTest {
     fun `cachedOrFetch regenerates when cached result exceeds feature TTL`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
-        val repository = AiRepository(dao, telemetry)
-        val now = System.currentTimeMillis()
+        val repository = repository(dao, telemetry)
 
         dao.insert(
             AiResultEntity(
@@ -236,7 +252,7 @@ class AiRepositoryTest {
                 kind = AiFeature.TRENDS.id,
                 articleUrl = null,
                 result = "Stale trends",
-                createdAt = now - AiFeature.TRENDS.cacheTtlMs - 1_000
+                createdAt = fixedNow.get() - AiFeature.TRENDS.cacheTtlMs - 1_000
             )
         )
 
@@ -249,11 +265,42 @@ class AiRepositoryTest {
     }
 
     @Test
+    fun `perFeaturePrune_preservesValidLongTtlRows`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val repository = repository(dao, telemetry)
+        val now = fixedNow.get()
+        val hour = 60L * 60 * 1000
+
+        dao.insert(
+            AiResultEntity("summary_ok", AiFeature.SUMMARY.id, null, "summary", now - 10 * hour)
+        )
+        dao.insert(
+            AiResultEntity("trends_expired", AiFeature.TRENDS.id, null, "trends", now - 7 * hour)
+        )
+        dao.insert(
+            AiResultEntity("themes_expired", AiFeature.THEMES.id, null, "themes", now - 25 * hour)
+        )
+        dao.insert(
+            AiResultEntity("reader_expired", AiFeature.READER.id, null, "reader", now - 8L * 24 * hour)
+        )
+
+        // Trigger prune via a cache miss on any feature.
+        repository.cachedOrFetch("trigger", AiFeature.FOR_YOU) { "fresh" }
+
+        assertEquals("summary", dao.get("summary_ok")?.result)
+        assertNull(dao.get("trends_expired"))
+        assertNull(dao.get("themes_expired"))
+        assertNull(dao.get("reader_expired"))
+        assertEquals("fresh", dao.get("trigger")?.result)
+    }
+
+    @Test
     fun `sameRequest_50ConcurrentCallers_onlyOneRemoteInvocation`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val repository = AiRepository(dao, telemetry, testScope)
+        val repository = repository(dao, telemetry, testScope)
         val fetchCount = AtomicInteger(0)
         val readyCount = AtomicInteger(0)
         val start = CompletableDeferred<Unit>()
@@ -270,13 +317,13 @@ class AiRepositoryTest {
                 }
             }
         }
-        // Suspend-friendly barrier (never block Default pool threads with a Latch).
         while (readyCount.get() < 50) {
-            kotlinx.coroutines.delay(1)
+            kotlinx.coroutines.yield()
         }
         start.complete(Unit)
-        // Give callers a moment to join the single-flight Deferred before release.
-        kotlinx.coroutines.delay(50)
+        while (fetchCount.get() < 1) {
+            kotlinx.coroutines.yield()
+        }
         hold.complete(Unit)
         val results = jobs.map { it.await() }
 
@@ -287,10 +334,70 @@ class AiRepositoryTest {
     }
 
     @Test
+    fun `failedSharedRequest_50Waiters_recordsOneErrorAndCleansInflight`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val repository = repository(dao, telemetry, testScope)
+        val fetchCount = AtomicInteger(0)
+        val readyCount = AtomicInteger(0)
+        val start = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Unit>()
+
+        val jobs = List(50) {
+            testScope.async {
+                readyCount.incrementAndGet()
+                start.await()
+                repository.cachedOrFetch("key_fail_50", AiFeature.SUMMARY) {
+                    fetchCount.incrementAndGet()
+                    hold.await()
+                    throw RuntimeException("429 quota")
+                }
+            }
+        }
+        while (readyCount.get() < 50) {
+            kotlinx.coroutines.yield()
+        }
+        start.complete(Unit)
+        while (fetchCount.get() < 1) {
+            kotlinx.coroutines.yield()
+        }
+        hold.complete(Unit)
+
+        var failures = 0
+        jobs.forEach { job ->
+            try {
+                job.await()
+                fail("Expected AiRequestException")
+            } catch (_: AiRequestException) {
+                failures++
+            }
+        }
+
+        assertEquals(50, failures)
+        assertEquals(1, fetchCount.get())
+        assertEquals(1, telemetry.cacheMisses.size)
+        assertEquals(1, telemetry.requests.size)
+        assertEquals(1, telemetry.errors.size)
+        assertNull(dao.get("key_fail_50"))
+
+        var secondFetch = 0
+        try {
+            repository.cachedOrFetch("key_fail_50", AiFeature.SUMMARY) {
+                secondFetch++
+                throw RuntimeException("429 again")
+            }
+            fail("Expected AiRequestException")
+        } catch (_: AiRequestException) {
+        }
+        assertEquals(1, secondFetch)
+    }
+
+    @Test
     fun `failedSharedRequest_isRemovedFromInflightMap`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
-        val repository = AiRepository(dao, telemetry)
+        val repository = repository(dao, telemetry)
 
         try {
             repository.cachedOrFetch("key_fail", AiFeature.SUMMARY) {
@@ -311,5 +418,100 @@ class AiRepositoryTest {
         }
 
         assertEquals(1, secondFetch)
+    }
+
+    @Test
+    fun `clearCache_blocksInFlightPersist_TEST_A`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val repository = repository(dao, telemetry, testScope)
+        val remoteStarted = CompletableDeferred<Unit>()
+        val releaseRemote = CompletableDeferred<Unit>()
+
+        val caller = testScope.async {
+            repository.cachedOrFetch("key_clear_a", AiFeature.SUMMARY) {
+                remoteStarted.complete(Unit)
+                releaseRemote.await()
+                "late success"
+            }
+        }
+
+        remoteStarted.await()
+        repository.clearCache()
+        releaseRemote.complete(Unit)
+
+        assertEquals("late success", caller.await())
+        assertEquals(0, dao.size())
+    }
+
+    @Test
+    fun `newGenerationAfterClear_canPersist_TEST_B`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val repository = repository(dao, telemetry)
+
+        repository.clearCache()
+        val result = repository.cachedOrFetch("key_clear_b", AiFeature.SUMMARY) { "new gen" }
+
+        assertEquals("new gen", result)
+        assertEquals("new gen", dao.get("key_clear_b")?.result)
+    }
+
+    @Test
+    fun `clearCache_emptiesPersistedRows_TEST_C`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val repository = repository(dao)
+
+        dao.insert(
+            AiResultEntity("existing", AiFeature.SUMMARY.id, null, "old", fixedNow.get())
+        )
+        repository.clearCache()
+
+        assertEquals(0, dao.size())
+    }
+
+    @Test
+    fun `sharedWaiters_clearDuringFlight_doesNotRepopulate_TEST_D`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val repository = repository(dao, telemetry, testScope)
+        val remoteStarted = CompletableDeferred<Unit>()
+        val releaseRemote = CompletableDeferred<Unit>()
+
+        val callers = List(8) {
+            testScope.async {
+                repository.cachedOrFetch("key_clear_d", AiFeature.READER) {
+                    remoteStarted.complete(Unit)
+                    releaseRemote.await()
+                    "should not persist"
+                }
+            }
+        }
+
+        remoteStarted.await()
+        repository.clearCache()
+        releaseRemote.complete(Unit)
+        callers.forEach { assertEquals("should not persist", it.await()) }
+        assertEquals(0, dao.size())
+    }
+
+    @Test
+    fun `cancellationIsNotRecordedAsAiError`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val repository = repository(dao, telemetry)
+
+        try {
+            repository.cachedOrFetch("key_cancel", AiFeature.SUMMARY) {
+                throw CancellationException("cancelled")
+            }
+            fail("Expected CancellationException")
+        } catch (_: CancellationException) {
+        }
+
+        assertEquals(0, telemetry.errors.size)
+        assertNull(dao.get("key_cancel"))
     }
 }

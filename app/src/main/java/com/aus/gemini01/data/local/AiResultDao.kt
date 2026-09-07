@@ -19,8 +19,13 @@ interface AiResultDao {
     @Query("SELECT kind, COUNT(*) as count FROM ai_results GROUP BY kind")
     fun countsByKind(): Flow<List<AiKindCount>>
 
-    @Query("DELETE FROM ai_results WHERE createdAt < :cutoffEpochMs")
-    suspend fun deleteOlderThan(cutoffEpochMs: Long): Int
+    /**
+     * Kind-aware TTL pruning: only rows for [kind] older than [cutoffEpochMs]
+     * are deleted. Must never be used with a global cutoff that would erase
+     * longer-lived features.
+     */
+    @Query("DELETE FROM ai_results WHERE kind = :kind AND createdAt < :cutoffEpochMs")
+    suspend fun deleteOlderThanForKind(kind: String, cutoffEpochMs: Long): Int
 
     @Query("DELETE FROM ai_results")
     suspend fun clearAll()

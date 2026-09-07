@@ -76,7 +76,7 @@ class AiCacheKeysTest {
 
     @Test
     fun `prompt version is pinned for cache invalidation`() {
-        assertEquals(4, AI_PROMPT_VERSION)
+        assertEquals(5, AI_PROMPT_VERSION)
     }
 
     @Test

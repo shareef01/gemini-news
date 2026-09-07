@@ -17,7 +17,7 @@ const val GEMINI_MODEL_LABEL = "Gemini 3.8 Flash"
  * Bump when a prompt's instructions change in a way that alters the expected
  * output shape - existing cache entries then miss and regenerate once.
  */
-const val AI_PROMPT_VERSION = 4
+const val AI_PROMPT_VERSION = 5
 
 enum class AiFeature(val id: String) {
     SUMMARY("summary"),

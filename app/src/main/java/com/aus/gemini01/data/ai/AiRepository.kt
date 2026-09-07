@@ -10,7 +10,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Single gateway for every Gemini call. Guarantees, per cache key:
@@ -18,16 +21,26 @@ import java.util.concurrent.ConcurrentHashMap
  *  2. Concurrent callers share one in-flight request instead of duplicating it.
  *  3. Failures are never cached, never retried automatically (a 429 must not
  *     be hammered), and are surfaced as classified [AiError]s.
+ *  4. Explicit [clearCache] advances a generation barrier so late successes from
+ *     prior generations cannot repopulate Room.
  *
  * UI cancellation abandons rather than kills the underlying request: a
- * late-arriving success still lands in the cache, so a re-tap is free.
+ * late-arriving success still lands in the cache (unless cleared), so a re-tap
+ * is free.
+ *
+ * Lifetime: [scope] is intentionally application-scoped so single-flight work
+ * can outlive a cancelled ViewModel collector. Prefer injecting the process
+ * scope from the Application when DI is introduced; see remediation docs.
  */
 class AiRepository(
     private val dao: AiResultDao,
     private val telemetry: AiTelemetry,
-    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val clock: () -> Long = { System.currentTimeMillis() }
 ) {
     private val inFlight = ConcurrentHashMap<String, Deferred<String>>()
+    private val cacheGeneration = AtomicLong(0L)
+    private val persistMutex = Mutex()
 
     suspend fun cachedOrFetch(
         cacheKey: String,
@@ -36,7 +49,7 @@ class AiRepository(
         fetch: suspend () -> String
     ): String {
         dao.get(cacheKey)?.let { cached ->
-            val ageMs = System.currentTimeMillis() - cached.createdAt
+            val ageMs = clock() - cached.createdAt
             val ttl = feature.cacheTtlMs
             if (ttl <= 0L || ageMs <= ttl) {
                 telemetry.recordCacheHit(feature)
@@ -44,33 +57,43 @@ class AiRepository(
             }
             // Expired — fall through to regenerate. Stale row is overwritten on insert.
         }
+
+        val generationAtStart = cacheGeneration.get()
         val deferred = synchronized(inFlight) {
             inFlight[cacheKey] ?: scope.async {
                 try {
                     // Another caller may have finished and written the cache while
                     // we were waiting to enter the single-flight map — reuse it.
                     dao.get(cacheKey)?.let { cached ->
-                        val ageMs = System.currentTimeMillis() - cached.createdAt
+                        val ageMs = clock() - cached.createdAt
                         val ttl = feature.cacheTtlMs
                         if (ttl <= 0L || ageMs <= ttl) {
                             telemetry.recordCacheHit(feature)
                             return@async cached.result
                         }
                     }
-                    // Only the single-flight owner records a miss and prunes;
-                    // concurrent waiters must not inflate diagnostics or race
-                    // on a non-thread-safe telemetry implementation.
+                    // Only the single-flight owner records miss/request/error and
+                    // prunes; waiters must not inflate diagnostics.
                     telemetry.recordCacheMiss(feature)
-                    pruneExpired(feature)
+                    pruneExpired()
                     telemetry.recordRequest(feature)
-                    val result = fetch()
-                    dao.insert(
-                        AiResultEntity(
+                    val result = try {
+                        fetch()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        val aiError = e.toAiError()
+                        telemetry.recordError(aiError)
+                        throw AiRequestException(aiError, e)
+                    }
+                    persistIfGenerationCurrent(
+                        generation = generationAtStart,
+                        entity = AiResultEntity(
                             cacheKey = cacheKey,
                             kind = feature.id,
                             articleUrl = articleUrl,
                             result = result,
-                            createdAt = System.currentTimeMillis()
+                            createdAt = clock()
                         )
                     )
                     result
@@ -84,24 +107,46 @@ class AiRepository(
             deferred.await()
         } catch (e: CancellationException) {
             throw e
+        } catch (e: AiRequestException) {
+            // Owner already recorded the classified failure exactly once.
+            throw e
         } catch (e: Exception) {
+            // Unexpected wrapper failure only — should be rare.
             val aiError = e.toAiError()
             telemetry.recordError(aiError)
             throw AiRequestException(aiError, e)
         }
     }
 
-    private suspend fun pruneExpired(feature: AiFeature) {
-        val ttl = feature.cacheTtlMs
-        if (ttl <= 0L) return
-        // Use the shortest TTL among time-sensitive kinds so trends/locations
-        // don't linger when a longer-lived feature triggers a miss.
-        val cutoff = System.currentTimeMillis() - minOf(
-            AiFeature.TRENDS.cacheTtlMs,
-            AiFeature.LOCATIONS.cacheTtlMs,
-            AiFeature.FOR_YOU.cacheTtlMs
-        )
-        runCatching { dao.deleteOlderThan(cutoff) }
+    /**
+     * Prunes every cacheable feature with that feature's own TTL cutoff.
+     * A six-hour trends miss must never delete a still-valid seven-day summary.
+     * CHAT has TTL 0 and is never persisted, so it is skipped.
+     */
+    private suspend fun pruneExpired() {
+        val now = clock()
+        AiFeature.entries.forEach { feature ->
+            val ttl = feature.cacheTtlMs
+            if (ttl <= 0L) return@forEach
+            runCatching {
+                dao.deleteOlderThanForKind(feature.id, now - ttl)
+            }
+        }
+    }
+
+    /**
+     * Persist only when the cache generation captured at request start still
+     * matches. Held briefly under [persistMutex] with [clearCache] so an insert
+     * cannot sneak between generation check and Room write.
+     */
+    private suspend fun persistIfGenerationCurrent(
+        generation: Long,
+        entity: AiResultEntity
+    ) {
+        persistMutex.withLock {
+            if (cacheGeneration.get() != generation) return
+            dao.insert(entity)
+        }
     }
 
     /**
@@ -132,7 +177,19 @@ class AiRepository(
             )
         }
 
+    /**
+     * Establishes an invalidation barrier: advances [cacheGeneration] then clears
+     * Room under the same mutex used by persist. In-flight owners from the prior
+     * generation may still return live results to their callers, but must not
+     * write into Room afterward.
+     */
     suspend fun clearCache() {
-        dao.clearAll()
+        persistMutex.withLock {
+            cacheGeneration.incrementAndGet()
+            dao.clearAll()
+        }
     }
+
+    /** Test/diagnostic visibility into the current invalidation generation. */
+    internal fun currentCacheGeneration(): Long = cacheGeneration.get()
 }
