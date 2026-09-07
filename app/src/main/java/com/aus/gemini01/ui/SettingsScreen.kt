@@ -130,7 +130,10 @@ fun SettingsScreen(
                         onValueChange = {},
                         readOnly = true,
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("News Region") },
+                        label = { Text("News Region (US headlines)") },
+                        supportingText = {
+                            Text("This build serves United States top headlines only.")
+                        },
                         shape = RoundedCornerShape(Dimens.radiusM),
                         trailingIcon = {
                             IconButton(onClick = { countryExpanded = true }) {

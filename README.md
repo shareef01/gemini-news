@@ -63,7 +63,7 @@ Built with **100% Jetpack Compose**, **Material 3 Adaptive Design**, **Firebase 
       <td align="center" width="33%">
         <img src="docs/screenshots/06_settings.png" alt="Settings" /><br />
         <b>⚙️ Settings & Privacy</b><br />
-        <i>Region tuning, AI language, and quota management</i>
+        <i>US headlines, AI language, and quota management</i>
       </td>
     </tr>
   </table>
