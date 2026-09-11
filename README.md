@@ -15,8 +15,13 @@
   <img src="https://img.shields.io/badge/Architecture-MVVM_Clean_StateFlow-green.svg?style=flat-square" alt="Architecture" />
   <img src="https://img.shields.io/badge/Android_Target-API_37-3DDC84.svg?style=flat-square&logo=android" alt="Android" />
   <img src="https://img.shields.io/badge/Min_SDK-API_31-3DDC84.svg?style=flat-square&logo=android" alt="Min SDK" />
+  <img src="https://img.shields.io/badge/Status-In_Development_(Pre--Release)-orange.svg?style=flat-square" alt="Status: In Development" />
   <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" alt="License" />
 </p>
+
+> [!WARNING]
+> **Project Status: In Development (Pre-Release / Developer Preview)**
+> This application is currently under active engineering development and is **not release-ready** for public distribution or Google Play Store publication. See [Production Notes](docs/PRODUCTION_NOTES.md) for remaining production blockers (such as backend proxy deployment, Play Integrity enforcement, Maps API restrictions, and production release signing).
 
 ---
 

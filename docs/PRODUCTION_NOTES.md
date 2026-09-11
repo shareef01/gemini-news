@@ -1,7 +1,18 @@
-# Production notes (NewsAPI / Maps / Firebase)
+# Production Notes & Release Readiness Checklist
 
-**Distribution intent:** personal / portfolio demo — not a consumer-scale Play Store
-product. The hardening below matches that threat model.
+> [!CAUTION]
+> **PROJECT STATUS: IN DEVELOPMENT / PRE-RELEASE — NOT RELEASE READY**
+> This application is currently an active engineering prototype and portfolio project. It is **NOT** release-ready for public consumer distribution or Google Play Store publication. The hardening described in this document represents developer-preview quality; the checklist below must be completed before any production release.
+
+## 🛑 Production Release Readiness Blockers
+
+The following mandatory steps must be completed before this app can be published for production:
+
+1. **Backend Proxy Deployment:** Client builds must NOT communicate directly with NewsAPI. A secure backend proxy must be deployed that validates Play Integrity / Firebase App Check tokens and holds the upstream provider secret server-side.
+2. **Firebase App Check Enforcement:** Play Integrity provider must be registered in the Firebase Console with the production release signing key, and App Check must be switched from monitoring to **Enforcement** for Google Cloud Vertex AI / Gemini.
+3. **Google Maps API Key Restrictions:** Restrict the Cloud Maps API key to the Android package `com.aus.gemini01` and the release keystore SHA-256 fingerprint in Google Cloud Console.
+4. **Production Keystore Signing:** Configure Google Play App Signing and manage release upload keys outside source control.
+5. **License & Terms of Service Compliance:** Validate NewsAPI and publisher syndication licensing for commercial / consumer distribution.
 
 ## NewsAPI key model & Backend Proxy Architecture
 

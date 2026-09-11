@@ -364,7 +364,7 @@ fun SettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Gemini News v${BuildConfig.VERSION_NAME}",
+                        text = "Gemini News v${BuildConfig.VERSION_NAME} (In Development)",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
