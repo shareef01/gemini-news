@@ -4,10 +4,11 @@ import androidx.room.Entity
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.data.Source
 
-@Entity(tableName = "cached_articles", primaryKeys = ["url", "category"])
+@Entity(tableName = "cached_articles", primaryKeys = ["url", "category", "country"])
 data class CachedArticleEntity(
     val url: String,
     val category: String,
+    val country: String = "us",
     val sourceName: String,
     val author: String?,
     val title: String,
@@ -19,9 +20,14 @@ data class CachedArticleEntity(
     val cachedAt: Long
 )
 
-fun Article.toCachedEntity(category: String, cachedAt: Long = System.currentTimeMillis()) = CachedArticleEntity(
+fun Article.toCachedEntity(
+    category: String,
+    country: String = "us",
+    cachedAt: Long = System.currentTimeMillis()
+) = CachedArticleEntity(
     url = url,
     category = category,
+    country = country,
     sourceName = source.name,
     author = author,
     title = title,

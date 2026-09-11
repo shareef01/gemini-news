@@ -29,7 +29,7 @@ private class FakeNewsApiService(
         category: String?,
         page: Int,
         pageSize: Int,
-        apiKey: String
+        apiKey: String?
     ): NewsResponse {
         headlineCalls++
         lastApiKey = apiKey
@@ -40,7 +40,7 @@ private class FakeNewsApiService(
         query: String,
         page: Int,
         pageSize: Int,
-        apiKey: String
+        apiKey: String?
     ): NewsResponse {
         lastQuery = query
         lastApiKey = apiKey
@@ -54,25 +54,26 @@ private class RecordingNewsDao(
     override fun getAllBookmarks(): Flow<List<ArticleEntity>> = emptyFlow()
     override suspend fun insertBookmark(article: ArticleEntity) = Unit
     override suspend fun deleteBookmark(article: ArticleEntity) = Unit
-    override suspend fun getCachedArticles(category: String): List<CachedArticleEntity> =
-        cached.filter { it.category == category }
+    override suspend fun getCachedArticles(category: String, country: String): List<CachedArticleEntity> =
+        cached.filter { it.category == category && it.country == country }
     override suspend fun insertCachedArticles(articles: List<CachedArticleEntity>) {
         cached.addAll(articles)
     }
-    override suspend fun deleteCachedArticlesByCategory(category: String) {
-        cached.removeAll { it.category == category }
+    override suspend fun deleteCachedArticlesByCategory(category: String, country: String) {
+        cached.removeAll { it.category == category && it.country == country }
     }
-    override suspend fun getOldestCachedAt(category: String): Long? =
-        cached.filter { it.category == category }.minOfOrNull { it.cachedAt }
+    override suspend fun getOldestCachedAt(category: String, country: String): Long? =
+        cached.filter { it.category == category && it.country == country }.minOfOrNull { it.cachedAt }
     override suspend fun deleteCachedArticlesOlderThan(cutoffEpochMs: Long) {
         cached.removeAll { it.cachedAt < cutoffEpochMs }
     }
     override suspend fun replaceCachedArticles(
         category: String,
+        country: String,
         articles: List<CachedArticleEntity>,
         cutoffEpochMs: Long
     ) {
-        cached.removeAll { it.category == category || it.cachedAt < cutoffEpochMs }
+        cached.removeAll { (it.category == category && it.country == country) || it.cachedAt < cutoffEpochMs }
         cached.addAll(articles)
     }
     override fun getAllHistory(): Flow<List<HistoryArticleEntity>> = emptyFlow()
@@ -89,16 +90,18 @@ private fun cachedArticle(
     url: String = "https://example.com/cached",
     title: String = "Cached",
     category: String = "general",
+    country: String = "us",
     cachedAt: Long = System.currentTimeMillis()
 ) = CachedArticleEntity(
     url = url,
     category = category,
+    country = country,
     sourceName = "Test",
     author = null,
     title = title,
     description = null,
     urlToImage = null,
-    publishedAt = "2026-01-01T00:00:00Z",
+    publishedAt = "2026-09-01T00:00:00Z",
     content = null,
     cachedAt = cachedAt
 )
@@ -183,7 +186,7 @@ class NewsRepositoryTest {
     @Test
     fun `local_runtime_failure_is_not_mislabeled_offline`() = kotlinx.coroutines.runBlocking {
         val dao = object : NewsDao by RecordingNewsDao() {
-            override suspend fun getCachedArticles(category: String): List<CachedArticleEntity> {
+            override suspend fun getCachedArticles(category: String, country: String): List<CachedArticleEntity> {
                 throw IllegalStateException("room exploded")
             }
         }
@@ -211,5 +214,59 @@ class NewsRepositoryTest {
             fail("Expected NewsProviderException")
         } catch (_: NewsProviderException) {
         }
+    }
+
+    @Test
+    fun `multi_region_cache_isolation_prevents_cross_country_leakage`() = kotlinx.coroutines.runBlocking {
+        // US cache is populated
+        val usArticle = cachedArticle(url = "https://example.com/us-news", title = "US Story", country = "us", cachedAt = 100L)
+        val dao = RecordingNewsDao(mutableListOf(usArticle))
+        val service = FakeNewsApiService { throw java.io.IOException("No internet connection") }
+        val repository = NewsRepository(dao, service) { "test-key" }
+
+        // Requesting US feed offline returns the cached US article
+        val usResult = repository.getTopHeadlines(countryCode = "us", allowOfflineFallback = true)
+        assertTrue(usResult.fromCache)
+        assertEquals("US Story", usResult.articles.first().title)
+
+        // Requesting GB feed offline does not leak US articles - it fails because GB has no cache
+        try {
+            repository.getTopHeadlines(countryCode = "gb", allowOfflineFallback = true)
+            fail("Expected IOException because GB has no cached articles")
+        } catch (e: java.io.IOException) {
+            assertEquals("No internet connection", e.message)
+        }
+    }
+
+    @Test
+    fun `proxy_mode_omits_api_key_and_allows_blank_client_credential`() = kotlinx.coroutines.runBlocking {
+        val dao = RecordingNewsDao()
+        val service = FakeNewsApiService(
+            NewsResponse(status = "ok", totalResults = 1, articles = listOf(
+                Article(
+                    source = Source("ProxySource"),
+                    author = "Author",
+                    title = "Story from Proxy",
+                    description = "Description",
+                    url = "https://example.com/proxy-story",
+                    urlToImage = null,
+                    publishedAt = "2026-09-01T00:00:00Z",
+                    content = null
+                )
+            ))
+        )
+        // In proxy mode, client has no api key (blank) and specifies proxy URL
+        val repository = NewsRepository(
+            newsDao = dao,
+            apiService = service,
+            apiKeyProvider = { "" },
+            proxyUrlProvider = { "https://news-proxy.example.com/" }
+        )
+
+        val result = repository.getTopHeadlines(allowOfflineFallback = false)
+        assertFalse(result.fromCache)
+        assertEquals("Story from Proxy", result.articles.first().title)
+        // Verify api key was not sent
+        assertEquals(null, service.lastApiKey)
     }
 }

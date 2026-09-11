@@ -50,6 +50,19 @@ class AiErrorTest {
         assertEquals(AiError.Timeout, ex!!.toAiError())
     }
 
+    @Test(expected = kotlinx.coroutines.CancellationException::class)
+    fun `cancellation exception throws directly and is not converted to AiError`() {
+        val cancellation = kotlinx.coroutines.CancellationException("Job cancelled by caller")
+        cancellation.toAiError()
+    }
+
+    @Test(expected = kotlinx.coroutines.CancellationException::class)
+    fun `nested cancellation exception in cause chain rethrows`() {
+        val root = kotlinx.coroutines.CancellationException("Inner job cancelled")
+        val wrapper = RuntimeException("Outer wrapper", root)
+        wrapper.toAiError()
+    }
+
     @Test
     fun `io exception without quota markers maps to unknown`() {
         val result = IOException("connection reset").toAiError()

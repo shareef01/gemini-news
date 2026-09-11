@@ -1,6 +1,10 @@
 package com.aus.gemini01.ui
 
 import com.aus.gemini01.data.Article
+import com.aus.gemini01.data.ai.ArticleEvidence
+import com.aus.gemini01.data.ai.ArticleInsight
+import com.aus.gemini01.data.ai.SentimentAnalysis
+import com.aus.gemini01.data.ai.SentimentTone
 
 internal data class ThemeParseResult(
     val themes: Map<String, List<Article>>,
@@ -125,4 +129,140 @@ internal fun parseLocationsResponse(
     }
 
     return LocationParseResult(locations, skipped)
+}
+
+/**
+ * Parses Gemini-generated article summaries into typed [ArticleInsight] structures.
+ *
+ * Validates evidence attribution against actual article text fields to catch
+ * model hallucinations or fabricated quotes.
+ */
+internal fun parseArticleInsight(
+    responseText: String,
+    article: Article
+): ArticleInsight {
+    val lines = responseText.lines().map { it.trim() }
+    val takeaways = mutableListOf<String>()
+    val entities = mutableListOf<String>()
+    var sentiment: SentimentAnalysis? = null
+    var currentSection = ""
+    val summaryLines = mutableListOf<String>()
+
+    val sentimentRegex = Regex(
+        """^(?:-|\*|•)?\s*(?:\*\*)?Sentiment(?:\*\*)?[:\s]+(\w+)(?:[\s—–-]+(.*))?""",
+        RegexOption.IGNORE_CASE
+    )
+
+    for (line in lines) {
+        if (line.isBlank()) continue
+
+        val lower = line.lowercase()
+        if (lower.contains("key takeaway") || lower.contains("takeaway")) {
+            currentSection = "takeaways"
+            continue
+        } else if (lower.contains("sentiment") || lower.contains("tone")) {
+            currentSection = "sentiment"
+            sentimentRegex.find(line)?.let { match ->
+                val toneStr = match.groupValues[1].uppercase()
+                val tone = when {
+                    toneStr.contains("POS") -> SentimentTone.POSITIVE
+                    toneStr.contains("NEG") -> SentimentTone.NEGATIVE
+                    else -> SentimentTone.NEUTRAL
+                }
+                val explanation = match.groupValues[2].trim()
+                sentiment = SentimentAnalysis(tone, explanation)
+            }
+            continue
+        } else if (lower.contains("key entit") || lower.contains("entities") || lower.contains("context")) {
+            currentSection = "entities"
+            continue
+        } else if (line.startsWith("#")) {
+            currentSection = "other"
+            continue
+        }
+
+        // Clean bullet marker
+        val content = line.removePrefix("-").removePrefix("*").removePrefix("•").trim()
+
+        when (currentSection) {
+            "takeaways" -> {
+                if (content.isNotBlank()) {
+                    takeaways.add(content)
+                }
+            }
+            "sentiment" -> {
+                if (sentiment == null) {
+                    val match = sentimentRegex.find(line)
+                    if (match != null) {
+                        val toneStr = match.groupValues[1].uppercase()
+                        val tone = when {
+                            toneStr.contains("POS") -> SentimentTone.POSITIVE
+                            toneStr.contains("NEG") -> SentimentTone.NEGATIVE
+                            else -> SentimentTone.NEUTRAL
+                        }
+                        val explanation = match.groupValues[2].trim()
+                        sentiment = SentimentAnalysis(tone, explanation)
+                    } else if (content.isNotBlank()) {
+                        val tone = when {
+                            content.uppercase().contains("POSITIVE") -> SentimentTone.POSITIVE
+                            content.uppercase().contains("NEGATIVE") -> SentimentTone.NEGATIVE
+                            else -> SentimentTone.NEUTRAL
+                        }
+                        sentiment = SentimentAnalysis(tone, content)
+                    }
+                }
+            }
+            "entities" -> {
+                if (content.isNotBlank()) {
+                    entities.add(content)
+                }
+            }
+            else -> {
+                summaryLines.add(line)
+            }
+        }
+    }
+
+    // Evidence attribution validation
+    val evidenceList = mutableListOf<ArticleEvidence>()
+    val title = article.title.lowercase()
+    val desc = (article.description ?: "").lowercase()
+    val body = (article.content ?: "").lowercase()
+
+    for (takeaway in takeaways) {
+        val words = takeaway.lowercase()
+            .split(Regex("""[\s,.;:!?()"]+"""))
+            .filter { it.length > 4 }
+        val inTitle = words.any { it in title }
+        val inDesc = words.any { it in desc }
+        val inBody = words.any { it in body }
+
+        val sourceField = when {
+            inDesc -> "description"
+            inBody -> "content"
+            inTitle -> "title"
+            else -> "unverified"
+        }
+        evidenceList.add(
+            ArticleEvidence(
+                quoteOrFact = takeaway,
+                sourceField = sourceField,
+                verifiedInSource = sourceField != "unverified"
+            )
+        )
+    }
+
+    val finalSummary = if (summaryLines.isNotEmpty()) {
+        summaryLines.joinToString("\n")
+    } else {
+        takeaways.firstOrNull() ?: article.description ?: article.title
+    }
+
+    return ArticleInsight(
+        summary = finalSummary,
+        takeaways = takeaways,
+        sentiment = sentiment,
+        entities = entities,
+        evidence = evidenceList
+    )
 }

@@ -1,0 +1,103 @@
+# Gemini News Security Architecture & Production Threat Model
+
+## Executive Summary
+
+This document specifies the security architecture, threat model, network hardening, credential handling, and defense-in-depth mechanisms implemented in the Gemini News application.
+
+---
+
+## 1. Upstream Credential Threat Model & Proxy Architecture
+
+### 1.1 The Client-Side Secret Vulnerability
+Embedding upstream API credentials (such as NewsAPI keys) into an Android client application is fundamentally insecure:
+- **Obfuscation Limits**: R8/ProGuard renames class and method names, but constant strings in bytecode, `BuildConfig`, resources, or compiled `.dex` files can be extracted using tools like Jadx, apktool, or strings.
+- **Transport Visibility**: Even over HTTPS, an end-user or attacker can inspect network requests using a local MITM proxy (e.g., Charles, mitmproxy) on a rooted device or emulator with user certificates.
+- **Quota & Billing Abuse**: Leaked API keys allow unauthorized third parties to exhaust quotas or incur costs.
+
+### 1.2 Production Backend Proxy Design
+In production deployments, the Android application does **not** hold or transmit the raw NewsAPI secret. Instead, requests flow through an authenticated backend proxy:
+
+```
++------------------+         App Check Token         +-----------------------+         Upstream Key         +-------------------+
+|  Android Client  | ------------------------------> | Backend Proxy         | ---------------------------> | NewsAPI Upstream  |
+|  (App Attested)  |   X-Firebase-AppCheck Header    | (Cloud Functions/Run) |   Secret Manager Injected    | (newsapi.org)     |
++------------------+                                 +-----------------------+                              +-------------------+
+        ^                                                        |
+        |                  Sanitized JSON Response               |
+        +--------------------------------------------------------+
+```
+
+#### Proxy Responsibilities:
+1. **Device & App Attestation**: Validates the `X-Firebase-AppCheck` header using Firebase App Check / Play Integrity to verify the request originates from an authentic, unmodified app on a genuine Android device.
+2. **Secret Injection**: Attaches the server-side `NEWS_API_KEY` (stored in Google Cloud Secret Manager / environment) before forwarding requests to `https://newsapi.org/`.
+3. **Response Sanitization**: Strips unused metadata, filters out `[Removed]` rows, and caches responses server-side to minimize upstream quota consumption.
+4. **Rate Limiting & Abuse Prevention**: Enforces IP-based and client-based rate limits to defend against denial-of-service or scraping attacks.
+
+### 1.3 Client Proxy-Ready Networking Layer
+The client networking layer (`NewsRepository` and `NewsApiService`) dynamically adapts to the deployment environment:
+- **Production Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key.
+- **Local Development Seam**: For independent local development, developers can supply `NEWS_API_KEY` in `local.properties` (which is excluded from version control via `.gitignore`).
+- **Fail-Closed Guarantee**: If neither a proxy URL nor a local API key is provided, requests fail closed immediately with a descriptive `MissingNewsApiKeyException`.
+
+---
+
+## 2. Network Security & Transport Hardening
+
+### 2.1 Cleartext Traffic Elimination
+- `AndroidManifest.xml` explicitly enforces `android:usesCleartextTraffic="false"`.
+- Production builds use `app/src/main/res/xml/network_security_config.xml` specifying `cleartextTrafficPermitted="false"` with system trust anchors.
+- All HTTP URLs for article loading, image loading, and AI feeds are either upgraded to HTTPS or rejected via `safeArticleUrl` and `safeImageUrl`.
+
+### 2.2 Local Development Loopback Isolation
+To support local development against mock servers or local proxies, `app/src/debug/res/xml/network_security_config.xml` scopes cleartext traffic strictly to `10.0.2.2` (Android emulator host loopback), `localhost`, and `127.0.0.1` without compromising release builds.
+
+---
+
+## 3. Web Navigation & Publisher Content Isolation
+
+### 3.1 Android Custom Tabs
+Directly embedding untrusted third-party publisher websites in an in-app `WebView` introduces significant risks:
+- **Phishing & Origin Spoofing**: Users cannot verify the genuine domain or SSL padlock of the publisher page.
+- **JavaScript & DOM Vulnerabilities**: Untrusted publisher scripts run within the application's context.
+
+Gemini News routes external publisher pages through **Android Custom Tabs** (`ArticleNavigator`):
+- **Process Isolation**: Publisher content runs in the system browser process, isolating cookies, credentials, and memory from the host app.
+- **Origin Visibility**: Displays the genuine domain name, SSL certificate status, and browser security controls.
+- **Strict URL Validation**: URLs are validated through `safeArticleUrl` before launching, ensuring HTTPS-only schemes.
+- **Safe Fallback**: If Custom Tabs is unavailable on the device, it falls back cleanly to external browser intents or the locked-down in-app WebView.
+
+---
+
+## 4. Multi-Region Cache Isolation & Database Migrations
+
+### 4.1 Cross-Region Cache Bleed Prevention
+In earlier versions, cached articles were keyed only by `(url, category)`. Switching countries while offline or on cache fallback could serve headlines from a previously loaded country.
+
+Gemini News isolates cache partitions across both category and country:
+- **Entity Composite Key**: `(url, category, country)` in `CachedArticleEntity`.
+- **Partitioned Queries**: Room queries filter by both `category` and `country`.
+- **Migration Discipline**: Room version bumped from 6 to 7 with explicit `MIGRATION_6_7`. In SQLite, modifying primary keys requires recreating the table; `MIGRATION_6_7` migrates all cached articles, backfills existing records with `'us'`, and preserves bookmarks, history, and AI results with zero data loss.
+
+---
+
+## 5. Gemini AI Prompt Injection Defense & Ground Truth
+
+### 5.1 Untrusted Article Content Delimitation
+Headlines, summaries, and full text from external RSS/API feeds are treated as untrusted data:
+- **Prompt Injection Guard**: Every prompt embeds instructions commanding the model to treat content within `[[DATA]] ... [[/DATA]]` blocks strictly as data and to ignore embedded instructions.
+- **Delimiter Stripping**: Incoming text has delimiter tokens stripped to prevent escaping the data block.
+- **Context Bounds**: Input fields are capped at 12,000 characters to prevent context window exhaustion or denial-of-service.
+
+### 5.2 Structured Insights & Evidence Attribution
+AI-generated article summaries are parsed into typed `ArticleInsight` models:
+- **Deterministic Sentiment**: Parsed into `SentimentTone` (`POSITIVE`, `NEGATIVE`, `NEUTRAL`) and explicit explanation.
+- **Evidence Verification**: Takeaways and claims are verified against the actual `title`, `description`, and `content` fields present in the app to detect and flag hallucinated citations.
+- **Graceful Fallback**: If the model output deviates from the expected structure, the UI renders the formatted markdown safely without crashing.
+
+---
+
+## 6. Privacy & Backup Policy
+
+- **Excluded from Cloud Backup**: `data_extraction_rules.xml` and `backup_rules.xml` explicitly exclude `database`, `datastore/`, and `sharedpref`.
+- **Local History & Bookmarks**: User reading history, bookmarks, and Gemini cache remain on the local device and are not uploaded to cloud backups or device-to-device migration transfers.
+- **Ephemeral AI Conversations**: AI chat turns remain strictly in-memory and are never written to disk.

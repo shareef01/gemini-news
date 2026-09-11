@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         HistoryArticleEntity::class,
         AiResultEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -50,6 +50,34 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v7: adds country dimension to cached_articles composite primary key for multi-region cache isolation. */
+        val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `cached_articles_temp` (" +
+                        "`url` TEXT NOT NULL, " +
+                        "`category` TEXT NOT NULL, " +
+                        "`country` TEXT NOT NULL DEFAULT 'us', " +
+                        "`sourceName` TEXT NOT NULL, " +
+                        "`author` TEXT, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`description` TEXT, " +
+                        "`urlToImage` TEXT, " +
+                        "`publishedAt` TEXT NOT NULL, " +
+                        "`content` TEXT, " +
+                        "`cachedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`url`, `category`, `country`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `cached_articles_temp` (" +
+                        "`url`, `category`, `country`, `sourceName`, `author`, `title`, `description`, `urlToImage`, `publishedAt`, `content`, `cachedAt`" +
+                    ") SELECT `url`, `category`, 'us', `sourceName`, `author`, `title`, `description`, `urlToImage`, `publishedAt`, `content`, `cachedAt` FROM `cached_articles`"
+                )
+                db.execSQL("DROP TABLE `cached_articles`")
+                db.execSQL("ALTER TABLE `cached_articles_temp` RENAME TO `cached_articles`")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -60,7 +88,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "news_database"
                 )
-                .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
                 INSTANCE = instance
                 instance

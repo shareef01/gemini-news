@@ -3,58 +3,38 @@
 **Distribution intent:** personal / portfolio demo — not a consumer-scale Play Store
 product. The hardening below matches that threat model.
 
-## NewsAPI key model
+## NewsAPI key model & Backend Proxy Architecture
 
-`NEWS_API_KEY` is read from `local.properties` (or the `NEWS_API_KEY` env var) and
-compiled into `BuildConfig`. That means:
+For production deployments, client-side secret embedding is strictly avoided:
+* `NEWS_PROXY_BASE_URL` can be specified in `local.properties` or as an environment variable (e.g., `https://news-proxy.yourdomain.com/`). When configured, `NewsRepository` routes all requests to this backend proxy without embedding or sending any client API key.
+* The backend proxy holds the actual provider secret, validates Firebase App Check / Play Integrity tokens, enforces rate limiting, and protects upstream quotas. See `docs/SECURITY_ARCHITECTURE.md` for details.
+* **Local Development Path:** For personal development without a running proxy, `NEWS_API_KEY` in `local.properties` remains supported as a direct fallback. When no proxy is configured, an empty `NEWS_API_KEY` fails closed (`MissingNewsApiKeyException`).
+* Secrets must never be committed to Git.
 
-* Git secrecy does **not** protect the key at runtime.
-* Anyone with the APK can extract the key from the binary.
-* R8 / obfuscation does **not** make a NewsAPI credential secret.
-* **Acceptable for personal/portfolio builds** with a rotatable key and an eye on
-  NewsAPI usage.
-* **Production / consumer requirement:** if this app is ever distributed as a real
-  public service, NewsAPI requests must go through a controlled backend/proxy where
-  the provider credential remains server-side, with authenticated or attested clients,
-  rate limiting, abuse controls, upstream quota protection, server-side secret storage,
-  observability, and minimal response proxying/caching where licensing permits.
-* An empty `NEWS_API_KEY` fails closed at runtime (`MissingNewsApiKeyException`)
-  with a clear Settings-facing message — no bogus NewsAPI call is made.
-* Breaking-news worker does not advance `lastNotifiedUrl` when
-  `POST_NOTIFICATIONS` was denied, and fails permanently on a missing API key.
+## Network Security Configuration
 
-## Maps API key
+Cleartext HTTP traffic is disabled across production builds:
+* `android:usesCleartextTraffic="false"` is set in `AndroidManifest.xml`.
+* `network_security_config.xml` enforces HTTPS exclusively for production.
+* Debug builds use a debug-scoped network security config permitting loopback traffic (`10.0.2.2`, `localhost`, `127.0.0.1`) for local proxy development and emulator mock servers.
 
-`MAPS_API_KEY` is injected into the manifest. Client visibility is expected for
-the Maps SDK. Restrict it in Google Cloud Console to this Android package
-(`com.aus.gemini01`) and your production signing certificate SHA-1/256 fingerprints.
-Firebase App Check does **not** protect the unrelated NewsAPI credential.
+## Multi-Region News Support
 
-## Firebase App Check
+* The app supports multiple top-headline regions: United States (`us`), United Kingdom (`gb`), Canada (`ca`), Australia (`au`), India (`in`), Germany (`de`), and France (`fr`).
+* Persistent preference is stored via DataStore and selectable in Settings.
+* Room caching uses composite primary key `(url, category, country)` with automated schema Migration 6→7 to ensure complete cache isolation between regions without collisions or data loss.
 
-* Debug builds use the App Check **debug** provider (`debugImplementation` only).
-* Release builds use **Play Integrity** only.
-* Enable App Check enforcement in Firebase for Vertex AI / Gemini once Play
-  Integrity is registered for the release signing cert.
-* `google-services.json` contains Firebase client configuration identifiers, not
-  private server secrets; do not treat those client keys as equivalent to a
-  NewsAPI server credential.
+## External Article Navigation (Android Custom Tabs)
 
-## Deep links
+* Publisher articles are opened via **Android Custom Tabs** (`ArticleNavigator`), ensuring sandboxed execution in the user's default browser, HTTPS enforcement, visual origin visibility, and SSL padlock indicators.
+* Deep link schemes and non-HTTP/HTTPS protocols (`javascript:`, `file:`, `content:`) are strictly filtered before launching.
+* In-app WebView remains isolated with JavaScript disabled and safe URL routing.
 
-There is no public `BROWSABLE` `newsapp://` intent filter. Shortcuts and
-notifications use explicit `MainActivity` intents. External apps cannot open
-custom-scheme routes via URI alone.
+## AI Structured Insights & Evidence Attribution
 
-## Gemini model
-
-Production builds pin `gemini-3.8-flash` (see `GEMINI_MODEL`). Do not switch back
-to a `-latest` alias for shipped releases.
-
-## Feed region
-
-This build serves United States top headlines only. Settings exposes a single
-US region option; multi-country cache identity is not implemented.
+* Gemini smart summaries are parsed into typed models (`ArticleInsight`, `Takeaway`, `SentimentAnalysis`, `ArticleEvidence`).
+* Evidence claims are rigorously validated against source text (article title, description, content) to prevent hallucinations and detect prompt injection.
+* Coroutine cancellation is preserved throughout all AI error classification paths (`CancellationException` is always rethrown).
 
 ## Device smoke (local Pixel)
 

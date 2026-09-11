@@ -16,6 +16,9 @@ val localProperties = Properties().apply {
 val newsApiKey: String = localProperties.getProperty("NEWS_API_KEY")
     ?: System.getenv("NEWS_API_KEY")
     ?: ""
+val newsProxyBaseUrl: String = localProperties.getProperty("NEWS_PROXY_BASE_URL")
+    ?: System.getenv("NEWS_PROXY_BASE_URL")
+    ?: ""
 val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY")
     ?: System.getenv("MAPS_API_KEY")
     ?: ""
@@ -42,6 +45,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "NEWS_API_KEY", "\"$newsApiKey\"")
+        buildConfigField("String", "NEWS_PROXY_BASE_URL", "\"$newsProxyBaseUrl\"")
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = mapsApiKey
     }
 
@@ -119,6 +123,7 @@ dependencies {
     implementation(libs.androidx.adaptive)
     implementation(libs.androidx.adaptive.layout)
     implementation(libs.androidx.adaptive.navigation)
+    implementation(libs.androidx.browser)
     ksp(libs.room.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

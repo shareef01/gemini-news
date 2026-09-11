@@ -109,6 +109,46 @@ class AppDatabaseMigration4To5RobolectricTest {
         }
     }
 
+    @Test
+    fun migrate6To7_addsCountryAndPreservesCache() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val config = SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name("migration-robolectric-news-v7")
+            .callback(object : SupportSQLiteOpenHelper.Callback(6) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    createV4Schema(db)
+                    AppDatabase.MIGRATION_4_5.migrate(db)
+                    AppDatabase.MIGRATION_5_6.migrate(db)
+                }
+
+                override fun onUpgrade(
+                    db: SupportSQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int
+                ) = Unit
+            })
+            .build()
+
+        val openHelper = FrameworkSQLiteOpenHelperFactory().create(config)
+        openHelper.writableDatabase.use { db ->
+            db.execSQL(
+                """
+                INSERT INTO cached_articles (url, category, sourceName, author, title, description, urlToImage, publishedAt, content, cachedAt)
+                VALUES ('https://example.com/c7', 'business', 'Src', 'Author', 'Business Story', 'Desc', 'img.png', '2026-09-01', 'Content', 123456789)
+                """.trimIndent()
+            )
+
+            AppDatabase.MIGRATION_6_7.migrate(db)
+
+            db.query("SELECT country, title, cachedAt FROM cached_articles WHERE url = 'https://example.com/c7'").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("us", c.getString(0))
+                assertEquals("Business Story", c.getString(1))
+                assertEquals(123456789L, c.getLong(2))
+            }
+        }
+    }
+
     private fun createV4Schema(db: SupportSQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS `articles` (" +

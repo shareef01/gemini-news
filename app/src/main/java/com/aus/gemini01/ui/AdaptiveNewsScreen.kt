@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 fun AdaptiveNewsScreen(
     viewModel: NewsViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val navigator = rememberListDetailPaneScaffoldNavigator<Article>()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -190,8 +191,7 @@ fun AdaptiveNewsScreen(
                                     coroutineScope.launch { navigator.navigateBack() }
                                 },
                                 onOpenInWeb = { 
-                                    selectedArticleForWeb = currentDetailArticle
-                                    viewModel.clearReaderView()
+                                    ArticleNavigator.openArticle(context, currentDetailArticle.url)
                                 },
                                 onRetry = {
                                     viewModel.fetchReaderView(currentDetailArticle)

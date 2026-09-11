@@ -229,4 +229,81 @@ class AiResponseParsersTest {
         assertEquals(1, result.skippedLines)
         assertTrue(result.locations.isEmpty())
     }
+
+    @Test
+    fun `article insight - parses takeaways sentiment and verifies evidence`() {
+        val testArticle = Article(
+            source = Source("Reuters"),
+            author = "Jane Doe",
+            title = "Tech Giant Announces Major Breakthrough in Quantum Computing",
+            description = "The new processor delivers unprecedented computational speed and efficiency for research laboratories worldwide.",
+            url = "https://example.com/quantum",
+            urlToImage = null,
+            publishedAt = "2026-09-01T12:00:00Z",
+            content = "Researchers achieved record quantum coherence times in silicon hardware."
+        )
+
+        val response = """
+            ## 📌 Key Takeaways
+            - Unprecedented computational speed achieved by processor
+            - Record quantum coherence times reached in silicon hardware
+            - Completely fabricated claim about flying cars
+
+            ## 💡 Sentiment & Tone
+            - Sentiment: Positive — Strong milestone for the research community
+
+            ## 🏢 Key Entities & Context
+            - Reuters, Tech Giant
+        """.trimIndent()
+
+        val insight = parseArticleInsight(response, testArticle)
+
+        assertEquals(3, insight.takeaways.size)
+        assertEquals(com.aus.gemini01.data.ai.SentimentTone.POSITIVE, insight.sentiment?.tone)
+        assertTrue(insight.sentiment?.explanation?.contains("Strong milestone") == true)
+        assertEquals(1, insight.entities.size)
+        assertEquals("Reuters, Tech Giant", insight.entities[0])
+
+        // Evidence verification: first two should be verified against description/content
+        assertTrue(insight.evidence[0].verifiedInSource)
+        assertEquals("description", insight.evidence[0].sourceField)
+
+        assertTrue(insight.evidence[1].verifiedInSource)
+        assertEquals("content", insight.evidence[1].sourceField)
+
+        // Third claim is not in the source text
+        org.junit.Assert.assertFalse(insight.evidence[2].verifiedInSource)
+        assertEquals("unverified", insight.evidence[2].sourceField)
+    }
+
+    @Test
+    fun `article insight - handles negative sentiment and freeform markdown fallback gracefully`() {
+        val testArticle = Article(
+            source = Source("BBC"),
+            author = null,
+            title = "Global Markets Plummet Amid Rising Inflation",
+            description = "Stock exchanges suffer heavy losses across European and Asian sectors.",
+            url = "https://example.com/markets",
+            urlToImage = null,
+            publishedAt = "2026-09-01T12:00:00Z",
+            content = null
+        )
+
+        val response = """
+            ## Summary
+            Markets faced sharp downturns today.
+
+            ## Key Takeaways
+            - European and Asian sectors suffered heavy losses
+
+            ## Tone
+            Sentiment: Negative - Investors express deep concern over inflationary pressures
+        """.trimIndent()
+
+        val insight = parseArticleInsight(response, testArticle)
+
+        assertEquals(1, insight.takeaways.size)
+        assertEquals(com.aus.gemini01.data.ai.SentimentTone.NEGATIVE, insight.sentiment?.tone)
+        assertTrue(insight.evidence[0].verifiedInSource)
+    }
 }

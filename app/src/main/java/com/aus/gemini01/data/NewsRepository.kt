@@ -76,7 +76,7 @@ data class FeedResult(
     val cachedAt: Long? = null
 )
 
-private fun createNewsApiService(): NewsApiService {
+private fun createNewsApiService(baseUrl: String = "https://newsapi.org/"): NewsApiService {
     val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
@@ -88,8 +88,9 @@ private fun createNewsApiService(): NewsApiService {
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
+    val normalizedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
     return Retrofit.Builder()
-        .baseUrl("https://newsapi.org/")
+        .baseUrl(normalizedUrl)
         .client(httpClient)
         .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
         .build()
@@ -99,11 +100,18 @@ private fun createNewsApiService(): NewsApiService {
 class NewsRepository(
     private val newsDao: NewsDao,
     apiService: NewsApiService? = null,
+    private val proxyUrlProvider: () -> String = { BuildConfig.NEWS_PROXY_BASE_URL },
     private val apiKeyProvider: () -> String = { BuildConfig.NEWS_API_KEY }
 ) {
-    // Production keeps the existing Retrofit configuration; tests can provide a
-    // deterministic service and key without network calls or credential state.
-    private val apiService: NewsApiService by lazy { apiService ?: createNewsApiService() }
+    // Production can route through a secure backend proxy or direct Retrofit;
+    // tests can provide a deterministic service and key without network calls or credential state.
+    private val apiService: NewsApiService by lazy {
+        apiService ?: run {
+            val proxyUrl = proxyUrlProvider()
+            val baseUrl = if (proxyUrl.isNotBlank()) proxyUrl else "https://newsapi.org/"
+            createNewsApiService(baseUrl)
+        }
+    }
 
     suspend fun getTopHeadlines(
         category: String? = null,
@@ -114,8 +122,12 @@ class NewsRepository(
         val effectiveCategory = category ?: "general"
 
         return try {
-            val apiKey = apiKeyProvider()
-            requireNewsApiKey(apiKey)
+            val proxyUrl = proxyUrlProvider()
+            val isProxy = proxyUrl.isNotBlank()
+            val apiKey = if (isProxy) null else apiKeyProvider()
+            if (!isProxy) {
+                requireNewsApiKey(apiKey.orEmpty())
+            }
             val response = apiService.getTopHeadlines(
                 country = countryCode,
                 category = effectiveCategory,
@@ -142,7 +154,14 @@ class NewsRepository(
                 val cutoff = fetchedAt - CACHE_TTL_DAYS * 24 * 60 * 60 * 1000
                 newsDao.replaceCachedArticles(
                     category = effectiveCategory,
-                    articles = articles.map { it.toCachedEntity(effectiveCategory, fetchedAt) },
+                    country = countryCode,
+                    articles = articles.map {
+                        it.toCachedEntity(
+                            category = effectiveCategory,
+                            country = countryCode,
+                            cachedAt = fetchedAt
+                        )
+                    },
                     cutoffEpochMs = cutoff
                 )
             }
@@ -154,15 +173,15 @@ class NewsRepository(
             throw e
         } catch (e: Exception) {
             if (!allowOfflineFallback || !shouldOfflineFallbackOnError(e)) throw e
-            // Offline / 5xx fallback: serve the cached feed. If there is nothing cached,
-            // surface the real error instead of fabricating articles.
+            // Offline / 5xx fallback: serve the cached feed for the requested region and category.
+            // If there is nothing cached for this region, surface the real error instead of fabricating articles.
             if (page == 1) {
-                val cached = newsDao.getCachedArticles(effectiveCategory)
+                val cached = newsDao.getCachedArticles(effectiveCategory, countryCode)
                 if (cached.isNotEmpty()) {
                     FeedResult(
                         articles = cached.map { it.toDomain() },
                         fromCache = true,
-                        cachedAt = newsDao.getOldestCachedAt(effectiveCategory)
+                        cachedAt = newsDao.getOldestCachedAt(effectiveCategory, countryCode)
                     )
                 } else {
                     throw e
@@ -174,8 +193,12 @@ class NewsRepository(
     }
 
     suspend fun searchNews(query: String, page: Int = 1): List<Article> {
-        val apiKey = apiKeyProvider()
-        requireNewsApiKey(apiKey)
+        val proxyUrl = proxyUrlProvider()
+        val isProxy = proxyUrl.isNotBlank()
+        val apiKey = if (isProxy) null else apiKeyProvider()
+        if (!isProxy) {
+            requireNewsApiKey(apiKey.orEmpty())
+        }
         val response = apiService.searchNews(query = query, page = page, apiKey = apiKey)
         if (response.status == "error") {
             throw NewsProviderException(response.message ?: "News API error: ${response.code}")

@@ -25,12 +25,15 @@ class AiRequestException(val error: AiError, cause: Throwable?) : Exception(caus
  * a coroutine concern and must never be classified as an AI error.
  */
 fun Throwable.toAiError(): AiError {
+    if (this is CancellationException && this !is TimeoutCancellationException) {
+        throw this
+    }
     var t: Throwable? = this
     var depth = 0
     while (t != null && depth < 4) {
         when (t) {
             is TimeoutCancellationException -> return AiError.Timeout
-            is CancellationException -> return AiError.Unknown(t.message)
+            is CancellationException -> throw t
         }
         val msg = (t.message ?: "").lowercase()
         when {

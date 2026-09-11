@@ -60,9 +60,8 @@ fun SettingsScreen(
     var countryExpanded by remember { mutableStateOf(false) }
     var languageExpanded by remember { mutableStateOf(false) }
 
-    val countries = mapOf(
-        "us" to "United States"
-    )
+    val regions = com.aus.gemini01.data.NewsRegion.SUPPORTED_REGIONS
+    val currentRegionName = com.aus.gemini01.data.NewsRegion.fromCountryCode(countryCode).displayName
     val languages = listOf("English", "Spanish", "French", "German", "Chinese", "Arabic", "Portuguese")
 
     if (showClearCacheDialog) {
@@ -82,7 +81,7 @@ fun SettingsScreen(
     if (showClearHistoryDialog) {
         ConfirmationDialog(
             title = "Clear Reading History?",
-            text = "This will delete your local reading history. Cached AI reading-stats results are cleared only when you also clear the headlines & AI cache.",
+            text = "This will remove your reading history across all sessions. Bookmarks will be kept.",
             confirmText = "Clear History",
             isDestructive = true,
             onConfirm = {
@@ -96,13 +95,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = "Settings",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -126,13 +119,13 @@ fun SettingsScreen(
             ) {
                 Box {
                     OutlinedTextField(
-                        value = countries[countryCode] ?: "United States",
+                        value = currentRegionName,
                         onValueChange = {},
                         readOnly = true,
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("News Region (US headlines)") },
+                        label = { Text("News Region") },
                         supportingText = {
-                            Text("This build serves United States top headlines only.")
+                            Text("Select region for top headlines and breaking news alerts.")
                         },
                         shape = RoundedCornerShape(Dimens.radiusM),
                         trailingIcon = {
@@ -146,11 +139,11 @@ fun SettingsScreen(
                         onDismissRequest = { countryExpanded = false },
                         modifier = Modifier.fillMaxWidth(0.85f)
                     ) {
-                        countries.forEach { (code, name) ->
+                        regions.forEach { region ->
                             DropdownMenuItem(
-                                text = { Text(name) },
+                                text = { Text(region.displayName) },
                                 onClick = {
-                                    viewModel.setCountryCode(code)
+                                    viewModel.setCountryCode(region.countryCode)
                                     countryExpanded = false
                                 }
                             )
@@ -457,7 +450,7 @@ private fun AiDiagnosticsCard(viewModel: NewsViewModel) {
                         modifier = Modifier.padding(bottom = Dimens.spaceS)
                     )
 
-                    if (d == null) {
+                    if (d.date.isEmpty() && d.requestsByFeature.isEmpty()) {
                         Text(
                             "AI telemetry will appear on your first AI action.",
                             style = MaterialTheme.typography.bodySmall,

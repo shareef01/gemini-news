@@ -13,7 +13,7 @@ import java.util.*
 
 class TtsManager(
     context: Context,
-    private val onPlaybackFinished: () -> Unit = {}
+    var onPlaybackFinished: () -> Unit = {}
 ) : TextToSpeech.OnInitListener {
     private val appContext = context.applicationContext
     private var tts: TextToSpeech? = TextToSpeech(appContext, this)

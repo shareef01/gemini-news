@@ -16,25 +16,30 @@ interface NewsDao {
     suspend fun deleteBookmark(article: ArticleEntity)
 
     // Caching Methods
-    @Query("SELECT * FROM cached_articles WHERE category = :category")
-    suspend fun getCachedArticles(category: String): List<CachedArticleEntity>
+    @Query("SELECT * FROM cached_articles WHERE category = :category AND country = :country")
+    suspend fun getCachedArticles(category: String, country: String = "us"): List<CachedArticleEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCachedArticles(articles: List<CachedArticleEntity>)
 
-    @Query("DELETE FROM cached_articles WHERE category = :category")
-    suspend fun deleteCachedArticlesByCategory(category: String)
+    @Query("DELETE FROM cached_articles WHERE category = :category AND country = :country")
+    suspend fun deleteCachedArticlesByCategory(category: String, country: String = "us")
 
-    @Query("SELECT MIN(cachedAt) FROM cached_articles WHERE category = :category")
-    suspend fun getOldestCachedAt(category: String): Long?
+    @Query("SELECT MIN(cachedAt) FROM cached_articles WHERE category = :category AND country = :country")
+    suspend fun getOldestCachedAt(category: String, country: String = "us"): Long?
 
     @Query("DELETE FROM cached_articles WHERE cachedAt < :cutoffEpochMs")
     suspend fun deleteCachedArticlesOlderThan(cutoffEpochMs: Long)
 
     @Transaction
-    suspend fun replaceCachedArticles(category: String, articles: List<CachedArticleEntity>, cutoffEpochMs: Long) {
+    suspend fun replaceCachedArticles(
+        category: String,
+        country: String = "us",
+        articles: List<CachedArticleEntity>,
+        cutoffEpochMs: Long
+    ) {
         deleteCachedArticlesOlderThan(cutoffEpochMs)
-        deleteCachedArticlesByCategory(category)
+        deleteCachedArticlesByCategory(category, country)
         insertCachedArticles(articles)
     }
 
