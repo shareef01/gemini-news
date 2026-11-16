@@ -28,14 +28,14 @@ In production deployments, the Android application does **not** hold or transmit
 ```
 
 #### Proxy Responsibilities:
-1. **Device & App Attestation**: Validates the `X-Firebase-AppCheck` header using Firebase App Check / Play Integrity to verify the request originates from an authentic, unmodified app on a genuine Android device.
+1. **Device & App Attestation**: The prepared HTTPS function enforces Firebase App Check / Play Integrity and consumes limited-use tokens, rejecting missing, invalid, or replayed requests. The Android proxy client requests a new limited-use token for each call.
 2. **Secret Injection**: Attaches the server-side `NEWS_API_KEY` (stored in Google Cloud Secret Manager / environment) before forwarding requests to `https://newsapi.org/`.
-3. **Response Sanitization**: Strips unused metadata, filters out `[Removed]` rows, and caches responses server-side to minimize upstream quota consumption.
-4. **Rate Limiting & Abuse Prevention**: Enforces IP-based and client-based rate limits to defend against denial-of-service or scraping attacks.
+3. **Response Sanitization**: Strips unused metadata and filters out `[Removed]` rows before returning the provider response to the app.
+4. **Scaling Guardrails & Rate Limiting**: The function caps instances and concurrency to bound scaling. This is not a request rate limit; durable per-client rate limits and provider/GCP quota alerts remain required before public distribution.
 
 ### 1.3 Client Proxy-Ready Networking Layer
 The client networking layer (`NewsRepository` and `NewsApiService`) dynamically adapts to the deployment environment:
-- **Production Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key, and attaches a Firebase App Check token in `X-Firebase-AppCheck`. App Check is installed at application startup so background worker requests are attested too.
+- **Production Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key, and attaches a fresh limited-use Firebase App Check token in `X-Firebase-AppCheck`. App Check is installed at application startup so background worker requests are attested too.
 - **Local Development Seam**: For independent local development, developers can supply `NEWS_API_KEY` in `local.properties` (which is excluded from version control via `.gitignore`).
 - **Fail-Closed Guarantee**: If neither a proxy URL nor a local API key is provided, requests fail closed immediately with a descriptive `MissingNewsApiKeyException`.
 

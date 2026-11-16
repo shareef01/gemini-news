@@ -8,9 +8,9 @@
 
 The following mandatory steps must be completed before this app can be published for production:
 
-1. **Backend Proxy Deployment:** Client builds must NOT communicate directly with NewsAPI. A secure backend proxy must be deployed that validates Play Integrity / Firebase App Check tokens and holds the upstream provider secret server-side.
+1. **Backend Proxy Deployment and Abuse Controls:** The Firebase HTTPS proxy source is in `functions/`; it validates and consumes one-time App Check tokens for the configured Android Firebase app, stores `NEWS_API_KEY` as a bound Secret Manager secret, limits accepted endpoints and query sizes, and caps function instances/concurrency. Deployment requires an enabled billing account. Add durable per-client request rate limiting and provider/GCP quota alerts before public distribution; the instance cap is not a request rate limiter.
 2. **Firebase App Check Signing Identity:** App Check enforcement is already active for Firebase AI Logic (`firebaseml.googleapis.com`), and Play Integrity is configured for the Android app. Before release, verify the registered certificate fingerprint matches the Play app-signing certificate used by production builds.
-3. **Google Maps API Key Restrictions:** Create/configure a Maps Android API key, then restrict it to the Android package `com.aus.gemini01` and the production signing certificate's SHA-1 fingerprint in Google Cloud Console.
+3. **Google Maps API Key Restrictions:** The Maps Android API is enabled, but Maps use still requires project billing. Once billing and the production signing certificate are available, create a dedicated key restricted to Android package `com.aus.gemini01`, the production certificate's SHA-1 fingerprint, and the Maps SDK for Android API.
 4. **Production Keystore Signing:** Configure Google Play App Signing and manage release upload keys outside source control. Copy `keystore.properties.example` to the ignored `keystore.properties`, create or provide the upload keystore under the ignored `keystore/` directory, and fill in the local credentials. No production signing key is included in this repository.
 5. **License & Terms of Service Compliance:** Confirm the NewsAPI account plan and publisher-content rights before distributing the app. NewsAPI's [Developer plan is limited to development and testing](https://newsapi.org/pricing). Its [terms](https://newsapi.org/terms) say third-party content may remain subject to intellectual-property rights and may not be used without permission or another legal basis; verify rights for any publisher text and images displayed or sent for AI processing.
 
@@ -18,7 +18,7 @@ The following mandatory steps must be completed before this app can be published
 
 For production deployments, client-side secret embedding is strictly avoided:
 * `NEWS_PROXY_BASE_URL` can be specified in `local.properties` or as an environment variable (e.g., `https://news-proxy.yourdomain.com/`). When configured, `NewsRepository` routes all requests to this backend proxy without embedding or sending any client API key.
-* The backend proxy holds the actual provider secret, validates Firebase App Check / Play Integrity tokens, enforces rate limiting, and protects upstream quotas. The Android client installs App Check at application startup and sends `X-Firebase-AppCheck` on proxy requests. See `docs/SECURITY_ARCHITECTURE.md` for details.
+* The prepared backend holds the provider secret in Secret Manager, validates and consumes Firebase App Check / Play Integrity tokens, and restricts upstream requests. Durable request rate limiting and quota alerts are still required before public distribution. The Android client installs App Check at application startup and sends a fresh limited-use token in `X-Firebase-AppCheck` for each proxy request. See `docs/SECURITY_ARCHITECTURE.md` for details.
 * **Local Development Path:** For personal development without a running proxy, `NEWS_API_KEY` in `local.properties` remains supported as a direct fallback. When no proxy is configured, an empty `NEWS_API_KEY` fails closed (`MissingNewsApiKeyException`).
 * Secrets must never be committed to Git.
 
@@ -40,9 +40,9 @@ Cleartext HTTP traffic is disabled across production builds:
 * No `NEWS_PROXY_BASE_URL` or `MAPS_API_KEY` is configured in this workspace.
 * No `keystore.properties` or upload keystore is present. The example file documents the expected local format only.
 * The locally configured NewsAPI key's account plan and publisher-specific rights have not been verified.
-* The Firebase project has the Cloud Functions API enabled, but billing is disabled and no billing account is available to the authenticated account. No proxy backend source exists in this repository, so deployment still requires billing plus an implemented backend.
-* Firebase App Check enforcement is active for Firebase AI Logic. The project's registered Play Integrity certificate fingerprint has not been matched against the production Play signing certificate.
-* The Maps Android API is not enabled, and there is no Maps key configured or restricted for this app.
+* The Firebase project has the Cloud Functions API enabled, but billing is disabled and no billing account is available to the authenticated account. Proxy source is prepared but not deployed; the NewsAPI secret has not been copied from local development configuration into Secret Manager. A dedicated proxy runtime service account has the App Check Token Verifier role; grant it Secret Manager Secret Accessor on the NewsAPI secret after that secret is created.
+* Firebase App Check enforcement is active for Firebase AI Logic. The proxy source enables App Check enforcement and replay protection. The project's registered Play Integrity certificate fingerprint has not been matched against the production Play signing certificate.
+* The Maps Android API is enabled, but project billing is disabled, so Maps requests cannot be used. There is no Maps key configured or restricted for this app.
 
 ## External Article Navigation (Android Custom Tabs)
 

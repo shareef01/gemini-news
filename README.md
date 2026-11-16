@@ -174,17 +174,21 @@ com.aus.gemini01/
 2. **Configure API Keys**:
    Create a `local.properties` file in the root directory (this file is git-ignored):
    ```properties
-   ## NewsAPI Key (from https://newsapi.org)
+   ## Development only: direct NewsAPI fallback
    NEWS_API_KEY=<your_news_api_key>
 
-   ## Google Maps API Key (from Google Cloud Console)
+   ## Production: proxy URL printed by Firebase after deployment
+   NEWS_PROXY_BASE_URL=https://<region>-<project>.cloudfunctions.net/newsProxy/
+
+   ## Google Maps API key (requires project billing and Android restrictions)
    MAPS_API_KEY=<your_maps_api_key>
    ```
-   Note: keys compiled into the APK are extractable. See [`docs/PRODUCTION_NOTES.md`](docs/PRODUCTION_NOTES.md).
+   `NEWS_API_KEY` is a local development fallback only; never ship it in an APK. For proxy deployment steps and release blockers, see [`docs/PRODUCTION_NOTES.md`](docs/PRODUCTION_NOTES.md).
 
 3. **Firebase**:
    - `app/google-services.json` is already present for the sample project.
    - To use your own Firebase project, replace it and enable Firebase AI + App Check.
+   - Also update `.firebaserc`, `ALLOWED_APP_ID`, and `serviceAccount` in `functions/index.js` for that project. Grant the runtime service account `roles/firebaseappcheck.tokenVerifier` on the project and `roles/secretmanager.secretAccessor` on the NewsAPI secret.
    - Debug builds use the App Check debug provider; release builds use Play Integrity.
 
 4. **Build and Run**:
@@ -195,6 +199,19 @@ com.aus.gemini01/
    # Install debug build to connected device
    ./gradlew installDebug
    ```
+
+### Deploy the News Proxy
+
+The Firebase HTTPS function source is under `functions/` and uses the Node.js 22 runtime. Deployment requires Node.js 22, Firebase CLI, and an enabled Cloud Billing account. After billing is attached and the NewsAPI plan permits the intended use, deploy with:
+
+```bash
+npm --prefix functions ci
+firebase functions:secrets:set NEWS_API_KEY
+gcloud secrets add-iam-policy-binding NEWS_API_KEY --member="serviceAccount:gemini-news-proxy-runtime@com-aus-gemini01-d91c9.iam.gserviceaccount.com" --role=roles/secretmanager.secretAccessor
+firebase deploy --only functions:newsProxy
+```
+
+Set `NEWS_PROXY_BASE_URL` to the deployed function URL with a trailing slash. The function requires a fresh, one-time Firebase App Check token and only forwards the supported US headlines and search query parameters. Do not configure a client NewsAPI key for production builds.
 
 ---
 

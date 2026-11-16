@@ -97,12 +97,11 @@ private fun createNewsApiService(
         .followRedirects(!useAppCheck)
         .followSslRedirects(!useAppCheck)
     if (useAppCheck) {
-        // Retrofit's OkHttp calls run on its dispatcher threads. Obtain a valid
-        // cached/refreshed App Check token there and fail closed if attestation
-        // cannot be produced; the proxy requires this header.
+        // The proxy consumes each token to reject replayed requests, so obtain a
+        // fresh limited-use token for every Retrofit request.
         httpClientBuilder.addInterceptor { chain ->
             val token = Tasks.await(
-                FirebaseAppCheck.getInstance().getAppCheckToken(false),
+                FirebaseAppCheck.getInstance().getLimitedUseAppCheckToken(),
                 30,
                 TimeUnit.SECONDS
             ).token
