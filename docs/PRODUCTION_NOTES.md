@@ -11,8 +11,8 @@ The following mandatory steps must be completed before this app can be published
 1. **Backend Proxy Deployment:** Client builds must NOT communicate directly with NewsAPI. A secure backend proxy must be deployed that validates Play Integrity / Firebase App Check tokens and holds the upstream provider secret server-side.
 2. **Firebase App Check Enforcement:** Play Integrity provider must be registered in the Firebase Console with the production release signing key, and App Check must be switched from monitoring to **Enforcement** for Google Cloud Vertex AI / Gemini.
 3. **Google Maps API Key Restrictions:** Restrict the Cloud Maps API key to the Android package `com.aus.gemini01` and the release keystore SHA-256 fingerprint in Google Cloud Console.
-4. **Production Keystore Signing:** Configure Google Play App Signing and manage release upload keys outside source control.
-5. **License & Terms of Service Compliance:** Validate NewsAPI and publisher syndication licensing for commercial / consumer distribution.
+4. **Production Keystore Signing:** Configure Google Play App Signing and manage release upload keys outside source control. Copy `keystore.properties.example` to the ignored `keystore.properties`, create or provide the upload keystore under the ignored `keystore/` directory, and fill in the local credentials. No production signing key is included in this repository.
+5. **License & Terms of Service Compliance:** Confirm the NewsAPI account plan and publisher-content rights before distributing the app. NewsAPI's [Developer plan is limited to development and testing](https://newsapi.org/pricing). Its [terms](https://newsapi.org/terms) say third-party content may remain subject to intellectual-property rights and may not be used without permission or another legal basis; verify rights for any publisher text and images displayed or sent for AI processing.
 
 ## NewsAPI key model & Backend Proxy Architecture
 
@@ -34,6 +34,12 @@ Cleartext HTTP traffic is disabled across production builds:
 * This build currently enables United States (`us`) top headlines because that is the only region confirmed for the configured NewsAPI plan.
 * Settings shows only regions enabled for the build; unsupported region values are normalized to the default.
 * Room v7 stores country in the cached-feed primary key `(url, category, country)`, so additional regions can be enabled later without cross-region cache collisions.
+
+## Current Local Release Configuration
+
+* No `NEWS_PROXY_BASE_URL` or `MAPS_API_KEY` is configured in this workspace.
+* No `keystore.properties` or upload keystore is present. The example file documents the expected local format only.
+* The locally configured NewsAPI key's account plan and publisher-specific rights have not been verified.
 
 ## External Article Navigation (Android Custom Tabs)
 

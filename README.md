@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Kotlin-2.3.21-purple.svg?style=flat-square&logo=kotlin" alt="Kotlin" />
+  <img src="https://img.shields.io/badge/Kotlin-2.4.21-purple.svg?style=flat-square&logo=kotlin" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Jetpack_Compose-Material_3-4285F4.svg?style=flat-square&logo=jetpackcompose" alt="Compose" />
   <img src="https://img.shields.io/badge/AI-Google_Gemini_Vertex_AI-orange.svg?style=flat-square&logo=google" alt="Gemini" />
   <img src="https://img.shields.io/badge/Architecture-MVVM_Clean_StateFlow-green.svg?style=flat-square" alt="Architecture" />
@@ -141,7 +141,7 @@ com.aus.gemini01/
 
 | Layer | Technology |
 |---|---|
-| **Language** | Kotlin 2.3.21 |
+| **Language** | Kotlin 2.4.21 |
 | **UI Framework** | Jetpack Compose (BOM 2026.08.00) & Material 3 |
 | **Adaptive UI** | AndroidX Compose Material3 Adaptive (1.3.0) |
 | **AI / LLM** | Google Gemini (`gemini-3.8-flash`, pinned) via Firebase AI |
