@@ -18,7 +18,7 @@ The following mandatory steps must be completed before this app can be published
 
 For production deployments, client-side secret embedding is strictly avoided:
 * `NEWS_PROXY_BASE_URL` can be specified in `local.properties` or as an environment variable (e.g., `https://news-proxy.yourdomain.com/`). When configured, `NewsRepository` routes all requests to this backend proxy without embedding or sending any client API key.
-* The backend proxy holds the actual provider secret, validates Firebase App Check / Play Integrity tokens, enforces rate limiting, and protects upstream quotas. See `docs/SECURITY_ARCHITECTURE.md` for details.
+* The backend proxy holds the actual provider secret, validates Firebase App Check / Play Integrity tokens, enforces rate limiting, and protects upstream quotas. The Android client installs App Check at application startup and sends `X-Firebase-AppCheck` on proxy requests. See `docs/SECURITY_ARCHITECTURE.md` for details.
 * **Local Development Path:** For personal development without a running proxy, `NEWS_API_KEY` in `local.properties` remains supported as a direct fallback. When no proxy is configured, an empty `NEWS_API_KEY` fails closed (`MissingNewsApiKeyException`).
 * Secrets must never be committed to Git.
 
@@ -29,11 +29,11 @@ Cleartext HTTP traffic is disabled across production builds:
 * `network_security_config.xml` enforces HTTPS exclusively for production.
 * Debug builds use a debug-scoped network security config permitting loopback traffic (`10.0.2.2`, `localhost`, `127.0.0.1`) for local proxy development and emulator mock servers.
 
-## Multi-Region News Support
+## News Region Availability
 
-* The app supports multiple top-headline regions: United States (`us`), United Kingdom (`gb`), Canada (`ca`), Australia (`au`), India (`in`), Germany (`de`), and France (`fr`).
-* Persistent preference is stored via DataStore and selectable in Settings.
-* Room caching uses composite primary key `(url, category, country)` with automated schema Migration 6→7 to ensure complete cache isolation between regions without collisions or data loss.
+* This build currently enables United States (`us`) top headlines because that is the only region confirmed for the configured NewsAPI plan.
+* Settings shows only regions enabled for the build; unsupported region values are normalized to the default.
+* Room v7 stores country in the cached-feed primary key `(url, category, country)`, so additional regions can be enabled later without cross-region cache collisions.
 
 ## External Article Navigation (Android Custom Tabs)
 

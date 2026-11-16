@@ -2,6 +2,8 @@ package com.aus.gemini01.data
 
 import com.aus.gemini01.BuildConfig
 import com.aus.gemini01.data.local.*
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.appcheck.FirebaseAppCheck
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
@@ -76,18 +78,41 @@ data class FeedResult(
     val cachedAt: Long? = null
 )
 
-private fun createNewsApiService(baseUrl: String = "https://newsapi.org/"): NewsApiService {
+private fun createNewsApiService(
+    baseUrl: String = "https://newsapi.org/",
+    useAppCheck: Boolean = false
+): NewsApiService {
     val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
         isLenient = true
         explicitNulls = false
     }
-    val httpClient = OkHttpClient.Builder()
+    val httpClientBuilder = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
-        .build()
+        // Never forward an attestation token through an HTTP redirect to a
+        // different origin. A proxy redirect is treated as a failed response.
+        .followRedirects(!useAppCheck)
+        .followSslRedirects(!useAppCheck)
+    if (useAppCheck) {
+        // Retrofit's OkHttp calls run on its dispatcher threads. Obtain a valid
+        // cached/refreshed App Check token there and fail closed if attestation
+        // cannot be produced; the proxy requires this header.
+        httpClientBuilder.addInterceptor { chain ->
+            val token = Tasks.await(
+                FirebaseAppCheck.getInstance().getAppCheckToken(false),
+                30,
+                TimeUnit.SECONDS
+            ).token
+            val request = chain.request().newBuilder()
+                .header("X-Firebase-AppCheck", token)
+                .build()
+            chain.proceed(request)
+        }
+    }
+    val httpClient = httpClientBuilder.build()
     val normalizedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
     return Retrofit.Builder()
         .baseUrl(normalizedUrl)
@@ -109,7 +134,7 @@ class NewsRepository(
         apiService ?: run {
             val proxyUrl = proxyUrlProvider()
             val baseUrl = if (proxyUrl.isNotBlank()) proxyUrl else "https://newsapi.org/"
-            createNewsApiService(baseUrl)
+            createNewsApiService(baseUrl, useAppCheck = proxyUrl.isNotBlank())
         }
     }
 

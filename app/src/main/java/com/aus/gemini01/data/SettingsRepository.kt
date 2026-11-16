@@ -15,8 +15,8 @@ import java.io.IOException
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-// Regions the configured NewsAPI plan is known to serve.
-private val supportedCountries = setOf("us")
+// Keep selectable regions aligned with the countries enabled for this build.
+private val supportedCountries = NewsRegion.SUPPORTED_REGIONS.map { it.countryCode }.toSet()
 
 class SettingsRepository(private val context: Context) {
     private val countryKey = stringPreferencesKey("country_code")
@@ -42,7 +42,7 @@ class SettingsRepository(private val context: Context) {
         .map { code ->
             // Heal values stored by older app versions that offered countries the
             // current NewsAPI plan doesn't serve (e.g. a persisted "de").
-            if (code in supportedCountries) code else "us"
+            if (code in supportedCountries) code else NewsRegion.DEFAULT.countryCode
         }
 
     val preferredLanguage: Flow<String> = preferencesFlow
@@ -72,7 +72,9 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setCountryCode(code: String) {
         context.dataStore.edit { preferences ->
-            preferences[countryKey] = code
+            preferences[countryKey] = code.lowercase()
+                .takeIf { it in supportedCountries }
+                ?: NewsRegion.DEFAULT.countryCode
         }
     }
 

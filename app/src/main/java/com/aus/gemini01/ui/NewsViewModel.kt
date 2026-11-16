@@ -524,7 +524,6 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
-        super.onCleared()
         voiceRecognizer.destroy()
         ttsManager.release()
     }

@@ -35,7 +35,7 @@ In production deployments, the Android application does **not** hold or transmit
 
 ### 1.3 Client Proxy-Ready Networking Layer
 The client networking layer (`NewsRepository` and `NewsApiService`) dynamically adapts to the deployment environment:
-- **Production Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key.
+- **Production Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key, and attaches a Firebase App Check token in `X-Firebase-AppCheck`. App Check is installed at application startup so background worker requests are attested too.
 - **Local Development Seam**: For independent local development, developers can supply `NEWS_API_KEY` in `local.properties` (which is excluded from version control via `.gitignore`).
 - **Fail-Closed Guarantee**: If neither a proxy URL nor a local API key is provided, requests fail closed immediately with a descriptive `MissingNewsApiKeyException`.
 
@@ -68,12 +68,12 @@ Gemini News routes external publisher pages through **Android Custom Tabs** (`Ar
 
 ---
 
-## 4. Multi-Region Cache Isolation & Database Migrations
+## 4. Region-Aware Cache Schema & Database Migrations
 
 ### 4.1 Cross-Region Cache Bleed Prevention
-In earlier versions, cached articles were keyed only by `(url, category)`. Switching countries while offline or on cache fallback could serve headlines from a previously loaded country.
+This build currently enables only United States headlines. Earlier schemas keyed cached articles by `(url, category)`; Room v7 adds a country dimension so additional regions can be enabled later without mixing cached feeds.
 
-Gemini News isolates cache partitions across both category and country:
+The cache schema isolates partitions across both category and country:
 - **Entity Composite Key**: `(url, category, country)` in `CachedArticleEntity`.
 - **Partitioned Queries**: Room queries filter by both `category` and `country`.
 - **Migration Discipline**: Room version bumped from 6 to 7 with explicit `MIGRATION_6_7`. In SQLite, modifying primary keys requires recreating the table; `MIGRATION_6_7` migrates all cached articles, backfills existing records with `'us'`, and preserves bookmarks, history, and AI results with zero data loss.

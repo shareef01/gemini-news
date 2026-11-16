@@ -125,14 +125,16 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("News Region") },
                         supportingText = {
-                            Text("Select region for top headlines and breaking news alerts.")
+                            Text("United States headlines are enabled for this build.")
                         },
                         shape = RoundedCornerShape(Dimens.radiusM),
-                        trailingIcon = {
-                            IconButton(onClick = { countryExpanded = true }) {
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Region")
+                        trailingIcon = if (regions.size > 1) {
+                            {
+                                IconButton(onClick = { countryExpanded = true }) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Region")
+                                }
                             }
-                        }
+                        } else null
                     )
                     DropdownMenu(
                         expanded = countryExpanded,
