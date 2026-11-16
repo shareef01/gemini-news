@@ -2,8 +2,8 @@
 
 ## Metadata
 
-- Date: 2026-11-16
-- Branch: `main`
+- Date: 2026-11-17
+- Branch: `codex/project-audit-hardening`
 - Starting revision: `785cf41`
 - Scope: static source, configuration, and documentation review
 
@@ -19,8 +19,9 @@ The current branch is Room v7. This review found and fixed three issues: proxy r
 
 ## Release readiness follow-up — 2026-11-17
 
-- Firebase CLI can see the Firebase project, but listing functions returns `403 SERVICE_DISABLED` because the Cloud Functions API is disabled. There is no active `gcloud` account or configured proxy URL, so a backend cannot be deployed from this workspace yet.
-- No Maps API key or production signing keystore is configured locally.
+- Authenticated access to the Firebase project was confirmed. The Cloud Functions API was enabled, but project billing is disabled and no billing account is available to the authenticated account. There is no proxy URL or backend source in this repository, so a proxy cannot yet be deployed.
+- Firebase App Check and Firebase Vertex AI APIs are enabled. App Check reports `firebaseml.googleapis.com` (Firebase AI Logic) as **ENFORCED**; a Play Integrity configuration and one SHA-256 certificate are registered for the Android app. The fingerprint could not be matched because no production signing keystore is present locally.
+- The Maps Android API is not enabled. No Maps API key or production signing keystore is configured locally. Android Maps key restrictions require the production certificate's SHA-1 fingerprint and package name.
 - NewsAPI's public terms restrict the free Developer plan to development/testing and state that third-party content rights remain the owners' responsibility. The configured key's plan and any publisher-specific rights are not known.
 - `keystore.properties.example` documents the expected local signing fields; no signing key or passwords were generated.
 - Kotlin Gradle Plugin and KSP were updated to compatible current releases. The AGP 9.5.1 advisory remains deferred: Android requires Gradle 9.6.0 for AGP 9.5.x, and Kotlin's fully supported AGP range currently ends at 9.3.1. This project remains on AGP 9.3.1 / Gradle 9.5.0 rather than crossing that compatibility boundary.
@@ -35,4 +36,4 @@ The current branch is Room v7. This review found and fixed three issues: proxy r
 | `./gradlew.bat connectedDebugAndroidTest` | PASS — 6 tests on API 36 emulator |
 | `git diff --check` | PASS — no whitespace errors |
 
-Firebase Console App Check enforcement, API key restrictions, and a deployed proxy were not available for live verification. This does not clear the release blockers listed in `PRODUCTION_NOTES.md`.
+Firebase AI Logic App Check enforcement was verified as active. The production signing fingerprint, Maps key restrictions, NewsAPI plan and publisher rights, and deployed proxy remain unverified or incomplete; the release blockers listed in `PRODUCTION_NOTES.md` therefore remain.

@@ -9,8 +9,8 @@
 The following mandatory steps must be completed before this app can be published for production:
 
 1. **Backend Proxy Deployment:** Client builds must NOT communicate directly with NewsAPI. A secure backend proxy must be deployed that validates Play Integrity / Firebase App Check tokens and holds the upstream provider secret server-side.
-2. **Firebase App Check Enforcement:** Play Integrity provider must be registered in the Firebase Console with the production release signing key, and App Check must be switched from monitoring to **Enforcement** for Google Cloud Vertex AI / Gemini.
-3. **Google Maps API Key Restrictions:** Restrict the Cloud Maps API key to the Android package `com.aus.gemini01` and the release keystore SHA-256 fingerprint in Google Cloud Console.
+2. **Firebase App Check Signing Identity:** App Check enforcement is already active for Firebase AI Logic (`firebaseml.googleapis.com`), and Play Integrity is configured for the Android app. Before release, verify the registered certificate fingerprint matches the Play app-signing certificate used by production builds.
+3. **Google Maps API Key Restrictions:** Create/configure a Maps Android API key, then restrict it to the Android package `com.aus.gemini01` and the production signing certificate's SHA-1 fingerprint in Google Cloud Console.
 4. **Production Keystore Signing:** Configure Google Play App Signing and manage release upload keys outside source control. Copy `keystore.properties.example` to the ignored `keystore.properties`, create or provide the upload keystore under the ignored `keystore/` directory, and fill in the local credentials. No production signing key is included in this repository.
 5. **License & Terms of Service Compliance:** Confirm the NewsAPI account plan and publisher-content rights before distributing the app. NewsAPI's [Developer plan is limited to development and testing](https://newsapi.org/pricing). Its [terms](https://newsapi.org/terms) say third-party content may remain subject to intellectual-property rights and may not be used without permission or another legal basis; verify rights for any publisher text and images displayed or sent for AI processing.
 
@@ -40,6 +40,9 @@ Cleartext HTTP traffic is disabled across production builds:
 * No `NEWS_PROXY_BASE_URL` or `MAPS_API_KEY` is configured in this workspace.
 * No `keystore.properties` or upload keystore is present. The example file documents the expected local format only.
 * The locally configured NewsAPI key's account plan and publisher-specific rights have not been verified.
+* The Firebase project has the Cloud Functions API enabled, but billing is disabled and no billing account is available to the authenticated account. No proxy backend source exists in this repository, so deployment still requires billing plus an implemented backend.
+* Firebase App Check enforcement is active for Firebase AI Logic. The project's registered Play Integrity certificate fingerprint has not been matched against the production Play signing certificate.
+* The Maps Android API is not enabled, and there is no Maps key configured or restricted for this app.
 
 ## External Article Navigation (Android Custom Tabs)
 
