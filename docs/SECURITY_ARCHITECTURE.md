@@ -29,13 +29,13 @@ In production deployments, the Android application does **not** hold or transmit
 
 #### Proxy Responsibilities:
 1. **Device & App Attestation**: The prepared HTTPS function enforces Firebase App Check / Play Integrity and consumes limited-use tokens, rejecting missing, invalid, or replayed requests. The Android proxy client requests a new limited-use token for each call.
-2. **Secret Injection**: Attaches the server-side `NEWS_API_KEY` (stored in Google Cloud Secret Manager / environment) before forwarding requests to `https://newsapi.org/`.
+2. **Secret Injection**: Attaches the server-side `NEWS_API_KEY` (stored in Google Cloud Secret Manager and bound only to the proxy function) before forwarding requests to `https://newsapi.org/`.
 3. **Response Sanitization**: Strips unused metadata and filters out `[Removed]` rows before returning the provider response to the app.
-4. **Scaling Guardrails & Rate Limiting**: The function caps instances and concurrency to bound scaling. This is not a request rate limit; durable per-client rate limits and provider/GCP quota alerts remain required before public distribution.
+4. **Scaling Guardrails & Rate Limiting**: Firestore transactions enforce per-installation limits of 30 requests per minute and 200 per UTC day, plus a global provider budget (100 requests per UTC day by default). Only an HMAC of the Firebase Installation ID is stored, and counters receive a 90-day idle-expiration timestamp. Firestore TTL deletes expired documents asynchronously when the policy is active. Function instance/concurrency caps add a separate scaling guardrail; configure the global budget to the verified NewsAPI plan quota and add billing alerts before public distribution.
 
 ### 1.3 Client Proxy-Ready Networking Layer
 The client networking layer (`NewsRepository` and `NewsApiService`) dynamically adapts to the deployment environment:
-- **Production Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key, and attaches a fresh limited-use Firebase App Check token in `X-Firebase-AppCheck`. App Check is installed at application startup so background worker requests are attested too.
+- **Production Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key, and attaches a fresh limited-use Firebase App Check token in `X-Firebase-AppCheck` plus the Firebase Installation ID in `X-Firebase-Installation-Id` for rate limiting. App Check is installed at application startup so background worker requests are attested too.
 - **Local Development Seam**: For independent local development, developers can supply `NEWS_API_KEY` in `local.properties` (which is excluded from version control via `.gitignore`).
 - **Fail-Closed Guarantee**: If neither a proxy URL nor a local API key is provided, requests fail closed immediately with a descriptive `MissingNewsApiKeyException`.
 
@@ -101,3 +101,4 @@ AI-generated article summaries are parsed into typed `ArticleInsight` models:
 - **Excluded from Cloud Backup**: `data_extraction_rules.xml` and `backup_rules.xml` explicitly exclude `database`, `datastore/`, and `sharedpref`.
 - **Local History & Bookmarks**: User reading history, bookmarks, and Gemini cache remain on the local device and are not uploaded to cloud backups or device-to-device migration transfers.
 - **Ephemeral AI Conversations**: AI chat turns remain strictly in-memory and are never written to disk.
+- **Proxy Rate-Limit Data**: Proxy requests include the Firebase Installation ID for rate limiting. The backend stores an HMAC of that ID, not the raw ID, and sets an expiration timestamp 90 days after the last update. Firestore TTL deletes expired documents asynchronously when enabled. Disclose this purpose and retention in the app privacy notice and Google Play Data safety form.

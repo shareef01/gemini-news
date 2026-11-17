@@ -4,6 +4,7 @@ import com.aus.gemini01.BuildConfig
 import com.aus.gemini01.data.local.*
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.installations.FirebaseInstallations
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
@@ -105,8 +106,14 @@ private fun createNewsApiService(
                 30,
                 TimeUnit.SECONDS
             ).token
+            val installationId = Tasks.await(
+                FirebaseInstallations.getInstance().id,
+                30,
+                TimeUnit.SECONDS
+            )
             val request = chain.request().newBuilder()
                 .header("X-Firebase-AppCheck", token)
+                .header("X-Firebase-Installation-Id", installationId)
                 .build()
             chain.proceed(request)
         }

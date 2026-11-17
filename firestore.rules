@@ -1,0 +1,10 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only the proxy runtime service account may read/write rate-limit state.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -188,7 +188,7 @@ com.aus.gemini01/
 3. **Firebase**:
    - `app/google-services.json` is already present for the sample project.
    - To use your own Firebase project, replace it and enable Firebase AI + App Check.
-   - Also update `.firebaserc`, `ALLOWED_APP_ID`, and `serviceAccount` in `functions/index.js` for that project. Grant the runtime service account `roles/firebaseappcheck.tokenVerifier` on the project and `roles/secretmanager.secretAccessor` on the NewsAPI secret.
+   - Also update `.firebaserc`, `ALLOWED_APP_ID`, and `serviceAccount` in `functions/index.js` for that project. Provision its default Firestore database near the function region before deploying; Firestore location cannot be changed later. Grant the runtime service account `roles/firebaseappcheck.tokenVerifier` and `roles/datastore.user` on the project, plus `roles/secretmanager.secretAccessor` on the NewsAPI secret.
    - Debug builds use the App Check debug provider; release builds use Play Integrity.
 
 4. **Build and Run**:
@@ -206,12 +206,16 @@ The Firebase HTTPS function source is under `functions/` and uses the Node.js 22
 
 ```bash
 npm --prefix functions ci
+firebase deploy --only firestore:rules
 firebase functions:secrets:set NEWS_API_KEY
 gcloud secrets add-iam-policy-binding NEWS_API_KEY --member="serviceAccount:gemini-news-proxy-runtime@com-aus-gemini01-d91c9.iam.gserviceaccount.com" --role=roles/secretmanager.secretAccessor
+gcloud firestore fields ttls update expiresAt --collection-group=newsProxyRateLimits --enable-ttl --project=com-aus-gemini01-d91c9
 firebase deploy --only functions:newsProxy
 ```
 
-Set `NEWS_PROXY_BASE_URL` to the deployed function URL with a trailing slash. The function requires a fresh, one-time Firebase App Check token and only forwards the supported US headlines and search query parameters. Do not configure a client NewsAPI key for production builds.
+Set `NEWS_API_DAILY_REQUEST_LIMIT` in `functions/.env.<project-id>` to a value within the NewsAPI plan quota. The default is 100 requests per UTC day. The proxy also limits each installation to 30 requests per minute and 200 per day; it stores only an HMAC of the Firebase installation ID and sets a 90-day idle-expiration timestamp. Firestore TTL deletes expired counters asynchronously and can incur delete charges.
+
+Set `NEWS_PROXY_BASE_URL` to the deployed function URL with a trailing slash. The function requires a fresh, one-time Firebase App Check token and only forwards the supported US headlines and search query parameters. Do not configure a client NewsAPI key for production builds. Update the app's privacy notice and Google Play Data safety disclosure to cover the installation ID's rate-limiting use and retention.
 
 ---
 

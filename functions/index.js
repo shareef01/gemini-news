@@ -1,14 +1,23 @@
 "use strict";
 
+const { createHmac } = require("node:crypto");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore, Timestamp } = require("firebase-admin/firestore");
 const { onRequest } = require("firebase-functions/v2/https");
-const { defineSecret } = require("firebase-functions/params");
+const { defineInt, defineSecret } = require("firebase-functions/params");
 
+initializeApp();
+const firestore = getFirestore();
 const NEWS_API_KEY = defineSecret("NEWS_API_KEY");
+const NEWS_API_DAILY_REQUEST_LIMIT = defineInt("NEWS_API_DAILY_REQUEST_LIMIT", { default: 100 });
 const NEWS_API_ORIGIN = "https://newsapi.org";
 const ALLOWED_APP_ID = "1:33904026107:android:80ecbda32c0539eade6b5e";
 const MAX_PAGE_SIZE = 20;
 const MAX_PAGE = 1000;
 const MAX_RESPONSE_BYTES = 1_000_000;
+const INSTALLATION_REQUESTS_PER_MINUTE = 30;
+const INSTALLATION_REQUESTS_PER_DAY = 200;
+const INSTALLATION_COUNTER_TTL_DAYS = 90;
 const CATEGORIES = new Set([
   "business",
   "entertainment",
@@ -106,6 +115,83 @@ function readNewsApiRequest(req) {
   throw new RequestError(404, "Unknown endpoint");
 }
 
+function secondsUntilNextUtcMinute(nowMs) {
+  return Math.max(1, Math.ceil(((Math.floor(nowMs / 60_000) + 1) * 60_000 - nowMs) / 1000));
+}
+
+function secondsUntilNextUtcDay(nowMs) {
+  const now = new Date(nowMs);
+  const nextUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return Math.max(1, Math.ceil((nextUtcMidnight - nowMs) / 1000));
+}
+
+async function reserveRequestQuota(req) {
+  const installationId = req.get("X-Firebase-Installation-Id");
+  if (typeof installationId !== "string" || !/^[A-Za-z0-9_-]{11,128}$/.test(installationId)) {
+    throw new RequestError(400, "Missing or invalid Firebase installation ID");
+  }
+
+  const dailyLimit = NEWS_API_DAILY_REQUEST_LIMIT.value();
+  if (!Number.isSafeInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 1_000_000) {
+    throw new Error("NEWS_API_DAILY_REQUEST_LIMIT must be an integer between 1 and 1000000");
+  }
+
+  const nowMs = Date.now();
+  const utcDay = new Date(nowMs).toISOString().slice(0, 10);
+  const minuteBucket = Math.floor(nowMs / 60_000);
+  const installationHash = createHmac("sha256", NEWS_API_KEY.value())
+    .update(`${req.app.appId}:${installationId}`)
+    .digest("hex");
+  const installationRef = firestore.collection("newsProxyRateLimits").doc(installationHash);
+  const quotaRef = firestore.collection("newsProxyControl").doc("providerQuota");
+  const nowTimestamp = Timestamp.fromMillis(nowMs);
+  const expiresAt = Timestamp.fromMillis(
+    nowMs + INSTALLATION_COUNTER_TTL_DAYS * 24 * 60 * 60 * 1000
+  );
+
+  return firestore.runTransaction(async (transaction) => {
+    const installationSnapshot = await transaction.get(installationRef);
+    const quotaSnapshot = await transaction.get(quotaRef);
+    const installation = installationSnapshot.exists ? installationSnapshot.data() : {};
+    const quota = quotaSnapshot.exists ? quotaSnapshot.data() : {};
+
+    const installationDayCount = installation.utcDay === utcDay
+      ? (Number.isSafeInteger(installation.dayCount) ? installation.dayCount : 0)
+      : 0;
+    const installationMinuteCount = installation.minuteBucket === minuteBucket
+      ? (Number.isSafeInteger(installation.minuteCount) ? installation.minuteCount : 0)
+      : 0;
+    const providerDayCount = quota.utcDay === utcDay
+      ? (Number.isSafeInteger(quota.dayCount) ? quota.dayCount : 0)
+      : 0;
+
+    if (installationMinuteCount >= INSTALLATION_REQUESTS_PER_MINUTE) {
+      return { allowed: false, retryAfterSeconds: secondsUntilNextUtcMinute(nowMs) };
+    }
+    if (installationDayCount >= INSTALLATION_REQUESTS_PER_DAY) {
+      return { allowed: false, retryAfterSeconds: secondsUntilNextUtcDay(nowMs) };
+    }
+    if (providerDayCount >= dailyLimit) {
+      return { allowed: false, retryAfterSeconds: secondsUntilNextUtcDay(nowMs) };
+    }
+
+    transaction.set(installationRef, {
+      utcDay,
+      dayCount: installationDayCount + 1,
+      minuteBucket,
+      minuteCount: installationMinuteCount + 1,
+      updatedAt: nowTimestamp,
+      expiresAt,
+    });
+    transaction.set(quotaRef, {
+      utcDay,
+      dayCount: providerDayCount + 1,
+      updatedAt: nowTimestamp,
+    });
+    return { allowed: true };
+  });
+}
+
 function sanitizeArticle(article) {
   if (!article || typeof article !== "object") return null;
   const title = typeof article.title === "string" ? article.title : "";
@@ -169,6 +255,13 @@ exports.newsProxy = onRequest(
 
     try {
       const { url } = readNewsApiRequest(req);
+      const reservation = await reserveRequestQuota(req);
+      if (!reservation.allowed) {
+        res.set("Retry-After", String(reservation.retryAfterSeconds));
+        fail(res, 429, "News request quota exceeded");
+        return;
+      }
+
       const upstream = await fetch(url, {
         method: "GET",
         headers: { "X-Api-Key": NEWS_API_KEY.value() },

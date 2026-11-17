@@ -12,6 +12,7 @@ ksp = "2.3.12"
 composeBom = "2026.08.00"
 firebaseAi = "17.15.0"
 firebaseAppCheck = "19.4.0"
+firebaseInstallations = "20.0.0"
 googleGmsGoogleServices = "4.5.0"
 retrofit = "3.0.0"
 coil = "3.5.0"
@@ -50,6 +51,7 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 firebase-ai = { group = "com.google.firebase", name = "firebase-ai", version.ref = "firebaseAi" }
 firebase-appcheck-playintegrity = { group = "com.google.firebase", name = "firebase-appcheck-playintegrity", version.ref = "firebaseAppCheck" }
 firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appcheck-debug", version.ref = "firebaseAppCheck" }
+firebase-installations = { group = "com.google.firebase", name = "firebase-installations", version.ref = "firebaseInstallations" }
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
 retrofit-serialization = { group = "com.jakewharton.retrofit", name = "retrofit2-kotlinx-serialization-converter", version.ref = "retrofitSerialization" }
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
