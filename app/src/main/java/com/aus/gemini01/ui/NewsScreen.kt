@@ -31,10 +31,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aus.gemini01.BuildConfig
 import coil3.compose.AsyncImage
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.ui.components.EmptyStateView
@@ -428,50 +430,122 @@ fun CategoryChips(
     selectedCategory: String,
     onCategorySelected: (String) -> Unit
 ) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = Dimens.gutterDefault, vertical = Dimens.spaceXS),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.spaceS)
+    val primaryCategories = categories.take(2)
+    val moreCategories = categories.drop(2)
+    val selectedMoreCategory = moreCategories.firstOrNull { it == selectedCategory }
+    var moreExpanded by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.gutterDefault),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        items(categories) { category ->
-            val label = when(category) {
-                "general" -> "Top Stories"
-                "smart" -> "Smart Themes"
-                "for_you" -> "For You"
-                "bookmarks" -> "Bookmarks"
-                "history" -> "History"
-                else -> category.replaceFirstChar { it.uppercase() }
+        LazyRow(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(
+                end = Dimens.spaceS,
+                top = Dimens.spaceXS,
+                bottom = Dimens.spaceXS
+            ),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.spaceS)
+        ) {
+            items(primaryCategories) { category ->
+                CategoryFilterChip(
+                    category = category,
+                    selected = selectedCategory == category,
+                    onClick = { onCategorySelected(category) }
+                )
             }
-            val icon = when(category) {
-                "general" -> Icons.AutoMirrored.Filled.TrendingUp
-                "smart" -> Icons.Default.AutoAwesome
-                "for_you" -> Icons.Default.Insights
-                "business" -> Icons.Default.BusinessCenter
-                "entertainment" -> Icons.Default.Movie
-                "health" -> Icons.Default.HealthAndSafety
-                "science" -> Icons.Default.Science
-                "sports" -> Icons.Default.SportsBasketball
-                "technology" -> Icons.Default.Memory
-                "bookmarks" -> Icons.Default.Bookmark
-                "history" -> Icons.Default.History
-                else -> null
-            }
+        }
+
+        Box {
             FilterChip(
-                selected = selectedCategory == category,
-                onClick = { onCategorySelected(category) },
+                selected = selectedMoreCategory != null,
+                onClick = { moreExpanded = true },
                 label = {
                     Text(
-                        label,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (selectedCategory == category) FontWeight.Bold else FontWeight.Medium
+                        selectedMoreCategory?.let(::categoryDisplayName) ?: "More",
+                        style = MaterialTheme.typography.labelMedium
                     )
                 },
-                leadingIcon = icon?.let {
-                    { Icon(it, contentDescription = label, modifier = Modifier.size(Dimens.iconSizeXS)) }
+                leadingIcon = {
+                    Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(Dimens.iconSizeXS))
+                },
+                trailingIcon = {
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(Dimens.iconSizeS))
                 },
                 shape = MaterialTheme.shapes.large
             )
+            DropdownMenu(
+                expanded = moreExpanded,
+                onDismissRequest = { moreExpanded = false }
+            ) {
+                moreCategories.forEach { category ->
+                    DropdownMenuItem(
+                        text = { Text(categoryDisplayName(category)) },
+                        leadingIcon = { CategoryIcon(category) },
+                        trailingIcon = if (selectedCategory == category) {
+                            { Icon(Icons.Default.Check, contentDescription = "Selected") }
+                        } else null,
+                        onClick = {
+                            moreExpanded = false
+                            onCategorySelected(category)
+                        }
+                    )
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun CategoryFilterChip(
+    category: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Text(
+                categoryDisplayName(category),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+            )
+        },
+        leadingIcon = { CategoryIcon(category) },
+        shape = MaterialTheme.shapes.large
+    )
+}
+
+@Composable
+private fun CategoryIcon(category: String) {
+    val icon = when (category) {
+        "general" -> Icons.AutoMirrored.Filled.TrendingUp
+        "smart" -> Icons.Default.AutoAwesome
+        "for_you" -> Icons.Default.Insights
+        "business" -> Icons.Default.BusinessCenter
+        "entertainment" -> Icons.Default.Movie
+        "health" -> Icons.Default.HealthAndSafety
+        "science" -> Icons.Default.Science
+        "sports" -> Icons.Default.SportsBasketball
+        "technology" -> Icons.Default.Memory
+        "bookmarks" -> Icons.Default.Bookmark
+        "history" -> Icons.Default.History
+        else -> null
+    } ?: return
+    Icon(icon, contentDescription = null, modifier = Modifier.size(Dimens.iconSizeXS))
+}
+
+private fun categoryDisplayName(category: String): String = when (category) {
+    "general" -> "Top Stories"
+    "smart" -> "Smart Themes"
+    "for_you" -> "For You"
+    "bookmarks" -> "Bookmarks"
+    "history" -> "History"
+    else -> category.replaceFirstChar { it.uppercase() }
 }
 
 @Composable
@@ -486,6 +560,7 @@ fun NewsList(
     onReadingMode: (Article) -> Unit
 ) {
     val listState = rememberLazyListState()
+    val uriHandler = LocalUriHandler.current
 
     LaunchedEffect(listState, articles.size) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
@@ -531,6 +606,17 @@ fun NewsList(
                         modifier = Modifier.size(28.dp),
                         strokeWidth = 2.5.dp
                     )
+                }
+            }
+        }
+
+        if (BuildConfig.NEWS_PROVIDER == "gdelt" && BuildConfig.NEWS_PROXY_BASE_URL.isBlank()) {
+            item {
+                TextButton(
+                    onClick = { uriHandler.openUri("https://www.gdeltproject.org/") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("News data from the GDELT Project")
                 }
             }
         }

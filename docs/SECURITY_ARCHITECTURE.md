@@ -28,16 +28,17 @@ In production deployments, the Android application does **not** hold or transmit
 ```
 
 #### Proxy Responsibilities:
-1. **Device & App Attestation**: Validates the `X-Firebase-AppCheck` header using Firebase App Check / Play Integrity to verify the request originates from an authentic, unmodified app on a genuine Android device.
-2. **Secret Injection**: Attaches the server-side `NEWS_API_KEY` (stored in Google Cloud Secret Manager / environment) before forwarding requests to `https://newsapi.org/`.
-3. **Response Sanitization**: Strips unused metadata, filters out `[Removed]` rows, and caches responses server-side to minimize upstream quota consumption.
-4. **Rate Limiting & Abuse Prevention**: Enforces IP-based and client-based rate limits to defend against denial-of-service or scraping attacks.
+1. **Device & App Attestation**: The prepared HTTPS function enforces Firebase App Check / Play Integrity and consumes limited-use tokens, rejecting missing, invalid, or replayed requests. The Android proxy client requests a new limited-use token for each call.
+2. **Secret Injection**: Attaches the server-side `NEWS_API_KEY` (stored in Google Cloud Secret Manager and bound only to the proxy function) before forwarding requests to `https://newsapi.org/`.
+3. **Response Sanitization**: Strips unused metadata and filters out `[Removed]` rows before returning the provider response to the app.
+4. **Scaling Guardrails & Rate Limiting**: Firestore transactions enforce per-installation limits of 30 requests per minute and 200 per UTC day, plus a global provider budget (100 requests per UTC day by default). Only an HMAC of the Firebase Installation ID is stored, and counters receive a 90-day idle-expiration timestamp. Firestore TTL deletes expired documents asynchronously when the policy is active. Function instance/concurrency caps add a separate scaling guardrail; configure the global budget to the verified NewsAPI plan quota and add billing alerts before public distribution.
 
 ### 1.3 Client Proxy-Ready Networking Layer
-The client networking layer (`NewsRepository` and `NewsApiService`) dynamically adapts to the deployment environment:
-- **Production Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key.
-- **Local Development Seam**: For independent local development, developers can supply `NEWS_API_KEY` in `local.properties` (which is excluded from version control via `.gitignore`).
-- **Fail-Closed Guarantee**: If neither a proxy URL nor a local API key is provided, requests fail closed immediately with a descriptive `MissingNewsApiKeyException`.
+The client networking layer (`NewsRepository`, `NewsApiService`, and `GdeltNewsApiService`) adapts to the build configuration:
+- **Optional Proxy Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key, and attaches a fresh limited-use Firebase App Check token in `X-Firebase-AppCheck` plus the Firebase Installation ID in `X-Firebase-Installation-Id` for rate limiting. This prepared Cloud Functions deployment requires billing and is not active in the current Spark project. App Check is installed at application startup so background worker requests are attested too.
+- **Spark Default**: `NEWS_PROVIDER=gdelt` uses the keyless GDELT DOC API. The client sends search terms to GDELT, limits request frequency, backs off for one minute after HTTP 429, caches results briefly, and displays GDELT attribution. It maps only title, publisher domain, URL, and seen time; it does not copy article text or images.
+- **Local NewsAPI Development**: Developers may set `NEWS_PROVIDER=newsapi` and `NEWS_API_KEY` in ignored `local.properties`. The key is only read for this debug provider; release builds clear it and use GDELT.
+- **Fail-Closed NewsAPI**: When the NewsAPI provider is explicitly selected and no key is present, requests fail with a descriptive `MissingNewsApiKeyException`.
 
 ---
 
@@ -68,12 +69,12 @@ Gemini News routes external publisher pages through **Android Custom Tabs** (`Ar
 
 ---
 
-## 4. Multi-Region Cache Isolation & Database Migrations
+## 4. Region-Aware Cache Schema & Database Migrations
 
 ### 4.1 Cross-Region Cache Bleed Prevention
-In earlier versions, cached articles were keyed only by `(url, category)`. Switching countries while offline or on cache fallback could serve headlines from a previously loaded country.
+This build currently enables only United States headlines. Earlier schemas keyed cached articles by `(url, category)`; Room v7 adds a country dimension so additional regions can be enabled later without mixing cached feeds.
 
-Gemini News isolates cache partitions across both category and country:
+The cache schema isolates partitions across both category and country:
 - **Entity Composite Key**: `(url, category, country)` in `CachedArticleEntity`.
 - **Partitioned Queries**: Room queries filter by both `category` and `country`.
 - **Migration Discipline**: Room version bumped from 6 to 7 with explicit `MIGRATION_6_7`. In SQLite, modifying primary keys requires recreating the table; `MIGRATION_6_7` migrates all cached articles, backfills existing records with `'us'`, and preserves bookmarks, history, and AI results with zero data loss.
@@ -101,3 +102,4 @@ AI-generated article summaries are parsed into typed `ArticleInsight` models:
 - **Excluded from Cloud Backup**: `data_extraction_rules.xml` and `backup_rules.xml` explicitly exclude `database`, `datastore/`, and `sharedpref`.
 - **Local History & Bookmarks**: User reading history, bookmarks, and Gemini cache remain on the local device and are not uploaded to cloud backups or device-to-device migration transfers.
 - **Ephemeral AI Conversations**: AI chat turns remain strictly in-memory and are never written to disk.
+- **Proxy Rate-Limit Data**: Proxy requests include the Firebase Installation ID for rate limiting. The backend stores an HMAC of that ID, not the raw ID, and sets an expiration timestamp 90 days after the last update. Firestore TTL deletes expired documents asynchronously when enabled. Disclose this purpose and retention in the app privacy notice and Google Play Data safety form.

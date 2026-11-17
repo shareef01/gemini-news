@@ -1,0 +1,16 @@
+{
+  "name": "gemini-news-functions",
+  "private": true,
+  "description": "Firebase HTTPS proxy for Gemini News",
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "lint": "node --check index.js"
+  },
+  "dependencies": {
+    "firebase-admin": "14.5.1",
+    "firebase-functions": "7.4.0"
+  }
+}

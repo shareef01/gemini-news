@@ -205,6 +205,7 @@ private val suggestedPrompts = listOf(
 
 @Composable
 private fun ChatEmptyState(onPromptSelected: (String) -> Unit) {
+    var showAllPrompts by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -233,7 +234,7 @@ private fun ChatEmptyState(onPromptSelected: (String) -> Unit) {
         )
         Spacer(modifier = Modifier.height(Dimens.spaceS))
         Text(
-            "Ask questions about the loaded feed. Gemini may also use general knowledge, so verify important claims with the linked publisher sources.",
+            "Ask about your feed or general knowledge. Verify current events with the linked publisher sources.",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -251,7 +252,7 @@ private fun ChatEmptyState(onPromptSelected: (String) -> Unit) {
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(start = Dimens.spaceXS)
             )
-            suggestedPrompts.forEach { prompt ->
+            suggestedPrompts.take(if (showAllPrompts) suggestedPrompts.size else 3).forEach { prompt ->
                 Surface(
                     onClick = { onPromptSelected(prompt) },
                     shape = RoundedCornerShape(Dimens.radiusL),
@@ -279,6 +280,14 @@ private fun ChatEmptyState(onPromptSelected: (String) -> Unit) {
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
+                }
+            }
+            if (!showAllPrompts) {
+                TextButton(
+                    onClick = { showAllPrompts = true },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Text("Show ${suggestedPrompts.size - 3} more questions")
                 }
             }
         }

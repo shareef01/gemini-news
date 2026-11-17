@@ -51,6 +51,11 @@ fun SettingsScreen(
         if (granted) viewModel.setNotificationsEnabled(true)
     }
 
+    val newsProviderLabel = if (
+        BuildConfig.NEWS_PROXY_BASE_URL.isNotBlank() ||
+        BuildConfig.NEWS_PROVIDER.equals("newsapi", ignoreCase = true)
+    ) "NewsAPI" else "GDELT"
+
     val reminderPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -125,14 +130,16 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("News Region") },
                         supportingText = {
-                            Text("Select region for top headlines and breaking news alerts.")
+                            Text("United States headlines are enabled for this build.")
                         },
                         shape = RoundedCornerShape(Dimens.radiusM),
-                        trailingIcon = {
-                            IconButton(onClick = { countryExpanded = true }) {
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Region")
+                        trailingIcon = if (regions.size > 1) {
+                            {
+                                IconButton(onClick = { countryExpanded = true }) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Region")
+                                }
                             }
-                        }
+                        } else null
                     )
                     DropdownMenu(
                         expanded = countryExpanded,
@@ -191,6 +198,35 @@ fun SettingsScreen(
                 icon = Icons.Default.AutoAwesome
             ) {
                 AiDiagnosticsCard(viewModel)
+            }
+
+            // Section 3: Notifications & Reminders
+            SettingsSection(
+                title = "News & Notifications",
+                icon = Icons.Default.Notifications
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Free-tier data saver",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            "Pauses background $newsProviderLabel polling to limit requests. Breaking News Alerts won't be sent while this is on.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = newsApiFreeTier,
+                        onCheckedChange = { viewModel.setNewsApiFreeTier(it) }
+                    )
+                }
 
                 HorizontalDivider(
                     modifier = Modifier.padding(vertical = Dimens.spaceM),
@@ -204,41 +240,12 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Free-tier data saver",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            "Pauses background breaking-news polling to conserve NewsAPI quota. Turning this on disables breaking alerts.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = newsApiFreeTier,
-                        onCheckedChange = { viewModel.setNewsApiFreeTier(it) }
-                    )
-                }
-            }
-
-            // Section 3: Notifications & Reminders
-            SettingsSection(
-                title = "Notifications",
-                icon = Icons.Default.Notifications
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
                             "Breaking News Alerts",
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            "Top headline notifications when news breaks. Enables background NewsAPI polling (turns off free-tier saver).",
+                            "Notifies you when a new top headline appears. Uses background $newsProviderLabel polling and is paused by the data saver.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -370,7 +377,7 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Powered by Google Cloud Vertex AI & NewsAPI",
+                        text = "News: $newsProviderLabel • AI: Gemini",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )

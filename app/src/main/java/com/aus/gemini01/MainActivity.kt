@@ -35,7 +35,6 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        AppCheckInstallerImpl().install(this)
         handleIntent(intent)
         NotificationHelper.createNotificationChannel(this)
 

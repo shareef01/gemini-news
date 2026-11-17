@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aus.gemini01.BuildConfig
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.data.ai.AiResult
 import com.aus.gemini01.data.ai.friendlyMessage
@@ -55,6 +56,8 @@ fun AdaptiveNewsScreen(
     var selectedArticleForWeb by rememberSaveable { mutableStateOf<Article?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showChat by rememberSaveable { mutableStateOf(false) }
+    var showLocations by rememberSaveable { mutableStateOf(false) }
+    var moreActionsExpanded by remember { mutableStateOf(false) }
 
     // Notification taps may arrive before the feed has loaded. Resolve the
     // validated URL against loaded NewsAPI/Room data before opening WebView.
@@ -69,35 +72,78 @@ fun AdaptiveNewsScreen(
 
     // Logic to decide what goes in the detail pane
     val currentDetailArticle = navigator.currentDestination?.contentKey
+    val openArticleFromAuxiliary: (Article) -> Unit = { article ->
+        showSettings = false
+        showChat = false
+        showLocations = false
+        viewModel.clearNewsLocations()
+        selectedArticleForWeb = article
+        coroutineScope.launch {
+            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
+        }
+    }
+    val openReaderFromAuxiliary: (Article) -> Unit = { article ->
+        showSettings = false
+        showChat = false
+        showLocations = false
+        viewModel.clearNewsLocations()
+        selectedArticleForWeb = null
+        viewModel.fetchReaderView(article)
+        coroutineScope.launch {
+            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
+        }
+    }
 
     if (showSettings) {
         BackHandler { showSettings = false }
-        SettingsScreen(viewModel = viewModel, onBack = { showSettings = false })
+        ResponsiveAuxiliaryLayout(
+            viewModel = viewModel,
+            snackbarHostState = snackbarHostState,
+            onArticleSelected = openArticleFromAuxiliary,
+            onReadingModeSelected = openReaderFromAuxiliary
+        ) {
+            SettingsScreen(viewModel = viewModel, onBack = { showSettings = false })
+        }
     } else if (showChat) {
         BackHandler { showChat = false }
-        NewsChatScreen(
-            messages = chatMessages,
-            isTyping = isChatting,
-            onSendMessage = { viewModel.sendChatMessage(it) },
-            onBack = { showChat = false }
-        )
-    } else if (newsLocations.isNotEmpty()) {
-        BackHandler { viewModel.clearNewsLocations() }
-        NewsMapScreen(
-            locations = newsLocations,
-            onBack = { viewModel.clearNewsLocations() },
-            onArticleClick = { url ->
-                val article = (uiState as? NewsUiState.Success)?.articles?.find { it.url == url }
-                if (article != null) {
+        ResponsiveAuxiliaryLayout(
+            viewModel = viewModel,
+            snackbarHostState = snackbarHostState,
+            onArticleSelected = openArticleFromAuxiliary,
+            onReadingModeSelected = openReaderFromAuxiliary
+        ) {
+            NewsChatScreen(
+                messages = chatMessages,
+                isTyping = isChatting,
+                onSendMessage = { viewModel.sendChatMessage(it) },
+                onBack = { showChat = false }
+            )
+        }
+    } else if (showLocations) {
+        BackHandler {
+            showLocations = false
+            viewModel.clearNewsLocations()
+        }
+        ResponsiveAuxiliaryLayout(
+            viewModel = viewModel,
+            snackbarHostState = snackbarHostState,
+            onArticleSelected = openArticleFromAuxiliary,
+            onReadingModeSelected = openReaderFromAuxiliary
+        ) {
+            NewsMapScreen(
+                locations = newsLocations,
+                onBack = {
+                    showLocations = false
                     viewModel.clearNewsLocations()
-                    selectedArticleForWeb = article
-                    viewModel.fetchReaderView(article)
-                    coroutineScope.launch {
-                        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
+                },
+                onArticleClick = { url ->
+                    val article = (uiState as? NewsUiState.Success)?.articles?.find { it.url == url }
+                    if (article != null) {
+                        openArticleFromAuxiliary(article)
                     }
                 }
-            }
-        )
+            )
+        }
     } else {
         ListDetailPaneScaffold(
             directive = navigator.scaffoldDirective,
@@ -109,11 +155,10 @@ fun AdaptiveNewsScreen(
                         topBar = {
                             TopAppBar(
                                 title = {
-                                    Icon(
-                                        imageVector = Icons.Default.AutoAwesome,
-                                        contentDescription = "Gemini News",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(26.dp)
+                                    Text(
+                                        text = "Gemini News",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 },
                                 actions = {
@@ -124,33 +169,44 @@ fun AdaptiveNewsScreen(
                                             tint = MaterialTheme.colorScheme.primary
                                         )
                                     }
-                                    IconButton(onClick = { viewModel.analyzeNewsLocations() }) {
-                                        Icon(
-                                            Icons.Default.Public,
-                                            contentDescription = "News Map",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    IconButton(onClick = { viewModel.analyzeTrendingTopics() }) {
-                                        Icon(
-                                            Icons.Default.LocalFireDepartment,
-                                            contentDescription = "Trending Topics",
-                                            tint = com.aus.gemini01.ui.theme.TrendingFlame
-                                        )
-                                    }
-                                    IconButton(onClick = { showSettings = true }) {
-                                        Icon(
-                                            Icons.Default.Settings,
-                                            contentDescription = "Settings",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    IconButton(onClick = { viewModel.fetchNews() }) {
-                                        Icon(
-                                            Icons.Default.Refresh,
-                                            contentDescription = "Refresh Feed",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                    Box {
+                                        IconButton(onClick = { moreActionsExpanded = true }) {
+                                            Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                                        }
+                                        DropdownMenu(
+                                            expanded = moreActionsExpanded,
+                                            onDismissRequest = { moreActionsExpanded = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(if (BuildConfig.MAPS_API_KEY_CONFIGURED) "News map" else "News locations")
+                                                },
+                                                leadingIcon = { Icon(Icons.Default.Public, contentDescription = null) },
+                                                onClick = {
+                                                    moreActionsExpanded = false
+                                                    showLocations = true
+                                                    viewModel.analyzeNewsLocations()
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Trending topics") },
+                                                leadingIcon = {
+                                                    Icon(Icons.Default.LocalFireDepartment, contentDescription = null)
+                                                },
+                                                onClick = {
+                                                    moreActionsExpanded = false
+                                                    viewModel.analyzeTrendingTopics()
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Settings") },
+                                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                                onClick = {
+                                                    moreActionsExpanded = false
+                                                    showSettings = true
+                                                }
+                                            )
+                                        }
                                     }
                                 },
                                 colors = TopAppBarDefaults.topAppBarColors(
@@ -282,6 +338,51 @@ fun AdaptiveNewsScreen(
     }
 
     GlobalOverlays(viewModel)
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ResponsiveAuxiliaryLayout(
+    viewModel: NewsViewModel,
+    snackbarHostState: SnackbarHostState,
+    onArticleSelected: (Article) -> Unit,
+    onReadingModeSelected: (Article) -> Unit,
+    content: @Composable () -> Unit
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        if (maxWidth >= 840.dp) {
+            Row(Modifier.fillMaxSize()) {
+                Scaffold(
+                    modifier = Modifier.weight(0.42f).fillMaxHeight(),
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    topBar = {
+                        TopAppBar(
+                            title = {
+                                Text(
+                                    text = "Gemini News",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        )
+                    }
+                ) { innerPadding ->
+                    NewsListContent(
+                        viewModel = viewModel,
+                        onArticleSelected = onArticleSelected,
+                        onReadingModeSelected = onReadingModeSelected,
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                }
+                VerticalDivider()
+                Box(Modifier.weight(0.58f).fillMaxHeight()) {
+                    content()
+                }
+            }
+        } else {
+            content()
+        }
+    }
 }
 
 @Composable

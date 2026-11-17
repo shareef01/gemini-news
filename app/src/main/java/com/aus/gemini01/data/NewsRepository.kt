@@ -1,9 +1,15 @@
 package com.aus.gemini01.data
 
+import android.os.SystemClock
 import com.aus.gemini01.BuildConfig
 import com.aus.gemini01.data.local.*
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.installations.FirebaseInstallations
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -19,6 +25,61 @@ import retrofit2.HttpException
 // Cached articles older than this are pruned on every fresh fetch, so the cache
 // doesn't accumulate stale news indefinitely.
 private const val CACHE_TTL_DAYS = 7L
+private const val GDELT_PAGE_SIZE = 20
+private const val GDELT_RESULT_LIMIT = 75
+private const val GDELT_CACHE_TTL_MS = 5 * 60 * 1000L
+private const val GDELT_MIN_REQUEST_INTERVAL_MS = 5_000L
+private const val GDELT_RATE_LIMIT_COOLDOWN_MS = 60_000L
+
+private object GdeltRequestThrottle {
+    private val mutex = Mutex()
+    private var lastRequestStartedAtMs = 0L
+    private var blockedUntilMs = 0L
+
+    suspend fun <T> execute(block: suspend () -> T): T {
+        mutex.lock()
+        try {
+            val now = SystemClock.elapsedRealtime()
+            val nextAllowedAt = maxOf(
+                lastRequestStartedAtMs + GDELT_MIN_REQUEST_INTERVAL_MS,
+                blockedUntilMs
+            )
+            val waitMs = nextAllowedAt - now
+            if (waitMs > 0) delay(waitMs)
+            lastRequestStartedAtMs = SystemClock.elapsedRealtime()
+            return try {
+                block()
+            } catch (error: HttpException) {
+                if (error.code() == 429) {
+                    blockedUntilMs = SystemClock.elapsedRealtime() + GDELT_RATE_LIMIT_COOLDOWN_MS
+                }
+                throw error
+            }
+        } finally {
+            mutex.unlock()
+        }
+    }
+}
+
+private fun createGdeltApiService(): GdeltNewsApiService {
+    val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        isLenient = true
+        explicitNulls = false
+    }
+    val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .build()
+    return Retrofit.Builder()
+        .baseUrl("https://api.gdeltproject.org/")
+        .client(client)
+        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+        .build()
+        .create(GdeltNewsApiService::class.java)
+}
 
 /** Thrown when BuildConfig was built without NEWS_API_KEY (empty local.properties / env). */
 class MissingNewsApiKeyException :
@@ -76,18 +137,46 @@ data class FeedResult(
     val cachedAt: Long? = null
 )
 
-private fun createNewsApiService(baseUrl: String = "https://newsapi.org/"): NewsApiService {
+private fun createNewsApiService(
+    baseUrl: String = "https://newsapi.org/",
+    useAppCheck: Boolean = false
+): NewsApiService {
     val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
         isLenient = true
         explicitNulls = false
     }
-    val httpClient = OkHttpClient.Builder()
+    val httpClientBuilder = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
-        .build()
+        // Never forward an attestation token through an HTTP redirect to a
+        // different origin. A proxy redirect is treated as a failed response.
+        .followRedirects(!useAppCheck)
+        .followSslRedirects(!useAppCheck)
+    if (useAppCheck) {
+        // The proxy consumes each token to reject replayed requests, so obtain a
+        // fresh limited-use token for every Retrofit request.
+        httpClientBuilder.addInterceptor { chain ->
+            val token = Tasks.await(
+                FirebaseAppCheck.getInstance().getLimitedUseAppCheckToken(),
+                30,
+                TimeUnit.SECONDS
+            ).token
+            val installationId = Tasks.await(
+                FirebaseInstallations.getInstance().id,
+                30,
+                TimeUnit.SECONDS
+            )
+            val request = chain.request().newBuilder()
+                .header("X-Firebase-AppCheck", token)
+                .header("X-Firebase-Installation-Id", installationId)
+                .build()
+            chain.proceed(request)
+        }
+    }
+    val httpClient = httpClientBuilder.build()
     val normalizedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
     return Retrofit.Builder()
         .baseUrl(normalizedUrl)
@@ -103,13 +192,62 @@ class NewsRepository(
     private val proxyUrlProvider: () -> String = { BuildConfig.NEWS_PROXY_BASE_URL },
     private val apiKeyProvider: () -> String = { BuildConfig.NEWS_API_KEY }
 ) {
-    // Production can route through a secure backend proxy or direct Retrofit;
-    // tests can provide a deterministic service and key without network calls or credential state.
+    // The default Spark path uses keyless GDELT metadata. Tests that inject the
+    // NewsAPI service retain the original NewsAPI behavior.
+    private val selectedNewsProvider = if (apiService != null) "newsapi" else BuildConfig.NEWS_PROVIDER
     private val apiService: NewsApiService by lazy {
         apiService ?: run {
             val proxyUrl = proxyUrlProvider()
             val baseUrl = if (proxyUrl.isNotBlank()) proxyUrl else "https://newsapi.org/"
-            createNewsApiService(baseUrl)
+            createNewsApiService(baseUrl, useAppCheck = proxyUrl.isNotBlank())
+        }
+    }
+    private val gdeltApiService: GdeltNewsApiService by lazy { createGdeltApiService() }
+    private val gdeltCacheMutex = Mutex()
+    private val gdeltCache = mutableMapOf<String, Pair<Long, List<Article>>>()
+
+    private suspend fun getGdeltArticles(
+        query: String,
+        page: Int,
+        allowStaleMemoryCacheOnRateLimit: Boolean = false
+    ): NewsResponse {
+        gdeltCacheMutex.lock()
+        try {
+            val now = System.currentTimeMillis()
+            val cached = gdeltCache[query]
+            val allArticles = if (cached != null && now - cached.first < GDELT_CACHE_TTL_MS) {
+                cached.second
+            } else {
+                val fetched = try {
+                    GdeltRequestThrottle.execute {
+                        gdeltApiService.articles(query = query, maxRecords = GDELT_RESULT_LIMIT)
+                            .articles
+                            .mapNotNull(GdeltArticle::toDomainArticle)
+                    }
+                } catch (error: HttpException) {
+                    if (
+                        !allowStaleMemoryCacheOnRateLimit ||
+                        error.code() != 429 ||
+                        cached == null ||
+                        cached.second.isEmpty()
+                    ) {
+                        throw error
+                    }
+                    cached.second
+                }
+                if (gdeltCache.size >= 32) {
+                    val oldestKey = gdeltCache.minByOrNull { it.value.first }?.key
+                    if (oldestKey != null) gdeltCache.remove(oldestKey)
+                }
+                gdeltCache[query] = System.currentTimeMillis() to fetched
+                fetched
+            }
+            val pageArticles = allArticles
+                .drop((page - 1).coerceAtLeast(0) * GDELT_PAGE_SIZE)
+                .take(GDELT_PAGE_SIZE)
+            return NewsResponse(totalResults = allArticles.size, articles = pageArticles)
+        } finally {
+            gdeltCacheMutex.unlock()
         }
     }
 
@@ -120,20 +258,30 @@ class NewsRepository(
         allowOfflineFallback: Boolean = true
     ): FeedResult {
         val effectiveCategory = category ?: "general"
+        var isGdeltRequest = false
 
         return try {
             val proxyUrl = proxyUrlProvider()
             val isProxy = proxyUrl.isNotBlank()
-            val apiKey = if (isProxy) null else apiKeyProvider()
-            if (!isProxy) {
+            val isGdelt = !isProxy && selectedNewsProvider.equals("gdelt", ignoreCase = true)
+            isGdeltRequest = isGdelt
+            val apiKey = if (isProxy || isGdelt) null else apiKeyProvider()
+            if (!isProxy && !isGdelt) {
                 requireNewsApiKey(apiKey.orEmpty())
             }
-            val response = apiService.getTopHeadlines(
-                country = countryCode,
-                category = effectiveCategory,
-                page = page,
-                apiKey = apiKey
-            )
+            val response = if (isGdelt) {
+                getGdeltArticles(
+                    query = gdeltTopHeadlinesQuery(effectiveCategory, countryCode),
+                    page = page
+                )
+            } else {
+                apiService.getTopHeadlines(
+                    country = countryCode,
+                    category = effectiveCategory,
+                    page = page,
+                    apiKey = apiKey
+                )
+            }
 
             if (response.status == "error") {
                 throw NewsProviderException(response.message ?: "News API error: ${response.code}")
@@ -172,7 +320,8 @@ class NewsRepository(
             // category overwrite the one the user actually navigated to.
             throw e
         } catch (e: Exception) {
-            if (!allowOfflineFallback || !shouldOfflineFallbackOnError(e)) throw e
+            val isGdeltRateLimit = isGdeltRequest && e is HttpException && e.code() == 429
+            if (!allowOfflineFallback || (!isGdeltRateLimit && !shouldOfflineFallbackOnError(e))) throw e
             // Offline / 5xx fallback: serve the cached feed for the requested region and category.
             // If there is nothing cached for this region, surface the real error instead of fabricating articles.
             if (page == 1) {
@@ -195,11 +344,20 @@ class NewsRepository(
     suspend fun searchNews(query: String, page: Int = 1): List<Article> {
         val proxyUrl = proxyUrlProvider()
         val isProxy = proxyUrl.isNotBlank()
-        val apiKey = if (isProxy) null else apiKeyProvider()
-        if (!isProxy) {
+        val isGdelt = !isProxy && selectedNewsProvider.equals("gdelt", ignoreCase = true)
+        val apiKey = if (isProxy || isGdelt) null else apiKeyProvider()
+        if (!isProxy && !isGdelt) {
             requireNewsApiKey(apiKey.orEmpty())
         }
-        val response = apiService.searchNews(query = query, page = page, apiKey = apiKey)
+        val response = if (isGdelt) {
+            getGdeltArticles(
+                query = gdeltSearchQuery(query, countryCode = "us"),
+                page = page,
+                allowStaleMemoryCacheOnRateLimit = true
+            )
+        } else {
+            apiService.searchNews(query = query, page = page, apiKey = apiKey)
+        }
         if (response.status == "error") {
             throw NewsProviderException(response.message ?: "News API error: ${response.code}")
         }

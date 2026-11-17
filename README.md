@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Kotlin-2.3.21-purple.svg?style=flat-square&logo=kotlin" alt="Kotlin" />
+  <img src="https://img.shields.io/badge/Kotlin-2.4.21-purple.svg?style=flat-square&logo=kotlin" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Jetpack_Compose-Material_3-4285F4.svg?style=flat-square&logo=jetpackcompose" alt="Compose" />
   <img src="https://img.shields.io/badge/AI-Google_Gemini_Vertex_AI-orange.svg?style=flat-square&logo=google" alt="Gemini" />
   <img src="https://img.shields.io/badge/Architecture-MVVM_Clean_StateFlow-green.svg?style=flat-square" alt="Architecture" />
@@ -141,7 +141,7 @@ com.aus.gemini01/
 
 | Layer | Technology |
 |---|---|
-| **Language** | Kotlin 2.3.21 |
+| **Language** | Kotlin 2.4.21 |
 | **UI Framework** | Jetpack Compose (BOM 2026.08.00) & Material 3 |
 | **Adaptive UI** | AndroidX Compose Material3 Adaptive (1.3.0) |
 | **AI / LLM** | Google Gemini (`gemini-3.8-flash`, pinned) via Firebase AI |
@@ -174,17 +174,25 @@ com.aus.gemini01/
 2. **Configure API Keys**:
    Create a `local.properties` file in the root directory (this file is git-ignored):
    ```properties
-   ## NewsAPI Key (from https://newsapi.org)
-   NEWS_API_KEY=<your_news_api_key>
+   ## Default: keyless GDELT feed
+   NEWS_PROVIDER=gdelt
 
-   ## Google Maps API Key (from Google Cloud Console)
-   MAPS_API_KEY=<your_maps_api_key>
+   ## Optional local development only: NewsAPI fallback
+   # NEWS_PROVIDER=newsapi
+   # NEWS_API_KEY=<your_news_api_key>
+
+   ## Optional proxy for a separate billing-enabled deployment
+   # NEWS_PROXY_BASE_URL=https://<region>-<project>.cloudfunctions.net/newsProxy/
+
+   ## Optional Maps key (not used in Spark/release builds)
+   # MAPS_API_KEY=<your_maps_api_key>
    ```
-   Note: keys compiled into the APK are extractable. See [`docs/PRODUCTION_NOTES.md`](docs/PRODUCTION_NOTES.md).
+   GDELT is the default keyless metadata source. `NEWS_API_KEY` is only read when `NEWS_PROVIDER=newsapi`, for local development; release builds strip it and use GDELT. See [`docs/PRODUCTION_NOTES.md`](docs/PRODUCTION_NOTES.md) for provider and release limits.
 
 3. **Firebase**:
    - `app/google-services.json` is already present for the sample project.
    - To use your own Firebase project, replace it and enable Firebase AI + App Check.
+   - Also update `.firebaserc`, `ALLOWED_APP_ID`, and `serviceAccount` in `functions/index.js` only if preparing the optional proxy for a billing-enabled project. Provision its default Firestore database near the function region before deploying; Firestore location cannot be changed later. Grant the runtime service account `roles/firebaseappcheck.tokenVerifier` and `roles/datastore.user` on the project, plus `roles/secretmanager.secretAccessor` on the NewsAPI secret.
    - Debug builds use the App Check debug provider; release builds use Play Integrity.
 
 4. **Build and Run**:
@@ -195,6 +203,31 @@ com.aus.gemini01/
    # Install debug build to connected device
    ./gradlew installDebug
    ```
+
+### Firebase Spark Plan Mode
+
+This project is being kept on Firebase's no-cost Spark plan. The app's default Firebase AI Logic backend is the Gemini Developer API; its free-tier models and quotas remain subject to Google's current limits. The default news source is the keyless [GDELT DOC API](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/), which returns headline metadata and publisher links. GDELT's [terms](https://gdeltproject.org/about.html#termsofuse) permit use with attribution and a link to the project; publisher pages and their content remain subject to their owners' rights. The app therefore omits GDELT-provided images, descriptions, and article text and links readers to publishers.
+
+GDELT rate-limits its public API, so this client serializes requests, spaces them by at least five seconds, waits a minute after an HTTP 429, caches query results for five minutes, and caps each query at 75 results. Search can reuse its last in-memory results during a rate limit; headline feeds fall back to Room's saved stories. Leave `NEWS_PROXY_BASE_URL` and `MAPS_API_KEY` unset. The map screen shows inferred locations as a list; Google Maps Platform requires project billing. `NEWS_API_KEY` can be used for local development only by setting `NEWS_PROVIDER=newsapi`; release builds clear that key and use GDELT. NewsAPI's Developer plan is limited to development and testing.
+
+### Optional News Proxy Deployment (requires billing)
+
+The steps below are reference instructions for a separate billing-enabled deployment; they are not part of this project's Spark configuration.
+
+The Firebase HTTPS function source is under `functions/` and uses the Node.js 22 runtime. Deployment requires Node.js 22, Firebase CLI, and an enabled Cloud Billing account. After billing is attached and the NewsAPI plan permits the intended use, deploy with:
+
+```bash
+npm --prefix functions ci
+firebase deploy --only firestore:rules
+firebase functions:secrets:set NEWS_API_KEY
+gcloud secrets add-iam-policy-binding NEWS_API_KEY --member="serviceAccount:gemini-news-proxy-runtime@com-aus-gemini01-d91c9.iam.gserviceaccount.com" --role=roles/secretmanager.secretAccessor
+gcloud firestore fields ttls update expiresAt --collection-group=newsProxyRateLimits --enable-ttl --project=com-aus-gemini01-d91c9
+firebase deploy --only functions:newsProxy
+```
+
+Set `NEWS_API_DAILY_REQUEST_LIMIT` in `functions/.env.<project-id>` to a value within the NewsAPI plan quota. The default is 100 requests per UTC day. The proxy also limits each installation to 30 requests per minute and 200 per day; it stores only an HMAC of the Firebase installation ID and sets a 90-day idle-expiration timestamp. Firestore TTL deletes expired counters asynchronously and can incur delete charges.
+
+Set `NEWS_PROXY_BASE_URL` to the deployed function URL with a trailing slash. The function requires a fresh, one-time Firebase App Check token and only forwards the supported US headlines and search query parameters. Do not configure a client NewsAPI key for production builds. Update the app's privacy notice and Google Play Data safety disclosure to cover the installation ID's rate-limiting use and retention.
 
 ---
 

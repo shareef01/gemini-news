@@ -10,13 +10,7 @@ data class NewsRegion(
 ) {
     companion object {
         val SUPPORTED_REGIONS = listOf(
-            NewsRegion("us", "en", "United States"),
-            NewsRegion("gb", "en", "United Kingdom"),
-            NewsRegion("ca", "en", "Canada"),
-            NewsRegion("au", "en", "Australia"),
-            NewsRegion("in", "en", "India"),
-            NewsRegion("de", "de", "Germany"),
-            NewsRegion("fr", "fr", "France")
+            NewsRegion("us", "en", "United States")
         )
 
         val DEFAULT = SUPPORTED_REGIONS.first()

@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.util.Locale
 
 plugins {
     alias(libs.plugins.android.application)
@@ -13,9 +14,19 @@ val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
-val newsApiKey: String = localProperties.getProperty("NEWS_API_KEY")
-    ?: System.getenv("NEWS_API_KEY")
-    ?: ""
+val newsProvider: String = (
+    localProperties.getProperty("NEWS_PROVIDER")
+        ?: System.getenv("NEWS_PROVIDER")
+        ?: "gdelt"
+).lowercase(Locale.ROOT)
+require(newsProvider == "gdelt" || newsProvider == "newsapi") {
+    "NEWS_PROVIDER must be either gdelt or newsapi."
+}
+val newsApiKey: String = if (newsProvider == "newsapi") {
+    localProperties.getProperty("NEWS_API_KEY") ?: System.getenv("NEWS_API_KEY") ?: ""
+} else {
+    ""
+}
 val newsProxyBaseUrl: String = localProperties.getProperty("NEWS_PROXY_BASE_URL")
     ?: System.getenv("NEWS_PROXY_BASE_URL")
     ?: ""
@@ -45,7 +56,9 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "NEWS_API_KEY", "\"$newsApiKey\"")
+        buildConfigField("String", "NEWS_PROVIDER", "\"$newsProvider\"")
         buildConfigField("String", "NEWS_PROXY_BASE_URL", "\"$newsProxyBaseUrl\"")
+        buildConfigField("boolean", "MAPS_API_KEY_CONFIGURED", mapsApiKey.isNotBlank().toString())
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = mapsApiKey
     }
 
@@ -64,6 +77,12 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            // Distributed builds use the keyless provider unless the optional proxy is configured.
+            // Never embed the local NewsAPI development credential or Maps key in a release APK.
+            buildConfigField("String", "NEWS_API_KEY", "\"\"")
+            buildConfigField("String", "NEWS_PROVIDER", "\"gdelt\"")
+            buildConfigField("boolean", "MAPS_API_KEY_CONFIGURED", "false")
+            manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = ""
             // Only attach release signing when a local keystore is configured.
             // Missing keystore fails loudly at validateSigning if forced; leaving
             // it unset lets CI prove R8 without fabricating production credentials.
@@ -107,6 +126,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.firebase.ai)
     implementation(libs.firebase.appcheck.playintegrity)
+    implementation(libs.firebase.installations)
+    implementation(libs.play.services.tasks)
     debugImplementation(libs.firebase.appcheck.debug)
     implementation(libs.retrofit)
     implementation(libs.retrofit.serialization)

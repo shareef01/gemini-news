@@ -4,7 +4,7 @@ import retrofit2.HttpException
 import java.io.IOException
 import java.net.SocketTimeoutException
 
-/** User-facing copy for NewsAPI / feed failures (keeps HTTP detail out of the UI). */
+/** User-facing copy for news-source / feed failures (keeps HTTP detail out of the UI). */
 fun newsFeedErrorMessage(error: Throwable): String {
     val http = error as? HttpException
     return when {
@@ -13,7 +13,7 @@ fun newsFeedErrorMessage(error: Throwable): String {
         error is NewsProviderException ->
             "Couldn't refresh the news feed. Check the API configuration and try again."
         http?.code() == 429 ->
-            "NewsAPI rate limit reached. Your cached stories are unchanged — try again later."
+            "The news source reached its rate limit. Try again in a little while."
         http != null && http.code() in 400..499 ->
             "Couldn't refresh the news feed. Check the API configuration and try again."
         error is SocketTimeoutException || error is kotlinx.coroutines.TimeoutCancellationException ->
