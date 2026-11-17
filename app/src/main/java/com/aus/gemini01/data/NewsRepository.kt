@@ -29,19 +29,32 @@ private const val GDELT_PAGE_SIZE = 20
 private const val GDELT_RESULT_LIMIT = 75
 private const val GDELT_CACHE_TTL_MS = 5 * 60 * 1000L
 private const val GDELT_MIN_REQUEST_INTERVAL_MS = 5_000L
+private const val GDELT_RATE_LIMIT_COOLDOWN_MS = 60_000L
 
 private object GdeltRequestThrottle {
     private val mutex = Mutex()
     private var lastRequestStartedAtMs = 0L
+    private var blockedUntilMs = 0L
 
     suspend fun <T> execute(block: suspend () -> T): T {
         mutex.lock()
         try {
-            val elapsed = SystemClock.elapsedRealtime() - lastRequestStartedAtMs
-            val waitMs = GDELT_MIN_REQUEST_INTERVAL_MS - elapsed
+            val now = SystemClock.elapsedRealtime()
+            val nextAllowedAt = maxOf(
+                lastRequestStartedAtMs + GDELT_MIN_REQUEST_INTERVAL_MS,
+                blockedUntilMs
+            )
+            val waitMs = nextAllowedAt - now
             if (waitMs > 0) delay(waitMs)
             lastRequestStartedAtMs = SystemClock.elapsedRealtime()
-            return block()
+            return try {
+                block()
+            } catch (error: HttpException) {
+                if (error.code() == 429) {
+                    blockedUntilMs = SystemClock.elapsedRealtime() + GDELT_RATE_LIMIT_COOLDOWN_MS
+                }
+                throw error
+            }
         } finally {
             mutex.unlock()
         }
@@ -193,7 +206,11 @@ class NewsRepository(
     private val gdeltCacheMutex = Mutex()
     private val gdeltCache = mutableMapOf<String, Pair<Long, List<Article>>>()
 
-    private suspend fun getGdeltArticles(query: String, page: Int): NewsResponse {
+    private suspend fun getGdeltArticles(
+        query: String,
+        page: Int,
+        allowStaleMemoryCacheOnRateLimit: Boolean = false
+    ): NewsResponse {
         gdeltCacheMutex.lock()
         try {
             val now = System.currentTimeMillis()
@@ -201,10 +218,22 @@ class NewsRepository(
             val allArticles = if (cached != null && now - cached.first < GDELT_CACHE_TTL_MS) {
                 cached.second
             } else {
-                val fetched = GdeltRequestThrottle.execute {
-                    gdeltApiService.articles(query = query, maxRecords = GDELT_RESULT_LIMIT)
-                        .articles
-                        .mapNotNull(GdeltArticle::toDomainArticle)
+                val fetched = try {
+                    GdeltRequestThrottle.execute {
+                        gdeltApiService.articles(query = query, maxRecords = GDELT_RESULT_LIMIT)
+                            .articles
+                            .mapNotNull(GdeltArticle::toDomainArticle)
+                    }
+                } catch (error: HttpException) {
+                    if (
+                        !allowStaleMemoryCacheOnRateLimit ||
+                        error.code() != 429 ||
+                        cached == null ||
+                        cached.second.isEmpty()
+                    ) {
+                        throw error
+                    }
+                    cached.second
                 }
                 if (gdeltCache.size >= 32) {
                     val oldestKey = gdeltCache.minByOrNull { it.value.first }?.key
@@ -321,7 +350,11 @@ class NewsRepository(
             requireNewsApiKey(apiKey.orEmpty())
         }
         val response = if (isGdelt) {
-            getGdeltArticles(query = gdeltSearchQuery(query, countryCode = "us"), page = page)
+            getGdeltArticles(
+                query = gdeltSearchQuery(query, countryCode = "us"),
+                page = page,
+                allowStaleMemoryCacheOnRateLimit = true
+            )
         } else {
             apiService.searchNews(query = query, page = page, apiKey = apiKey)
         }
