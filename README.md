@@ -174,16 +174,20 @@ com.aus.gemini01/
 2. **Configure API Keys**:
    Create a `local.properties` file in the root directory (this file is git-ignored):
    ```properties
-   ## Development only: direct NewsAPI fallback
-   NEWS_API_KEY=<your_news_api_key>
+   ## Default: keyless GDELT feed
+   NEWS_PROVIDER=gdelt
 
-   ## Production: proxy URL printed by Firebase after deployment
-   NEWS_PROXY_BASE_URL=https://<region>-<project>.cloudfunctions.net/newsProxy/
+   ## Optional local development only: NewsAPI fallback
+   # NEWS_PROVIDER=newsapi
+   # NEWS_API_KEY=<your_news_api_key>
 
-   ## Google Maps API key (requires project billing and Android restrictions)
-   MAPS_API_KEY=<your_maps_api_key>
+   ## Optional proxy for a separate billing-enabled deployment
+   # NEWS_PROXY_BASE_URL=https://<region>-<project>.cloudfunctions.net/newsProxy/
+
+   ## Optional Maps key (not used in Spark/release builds)
+   # MAPS_API_KEY=<your_maps_api_key>
    ```
-   `NEWS_API_KEY` is a local development fallback only; never ship it in an APK. For proxy deployment steps and release blockers, see [`docs/PRODUCTION_NOTES.md`](docs/PRODUCTION_NOTES.md).
+   GDELT is the default keyless metadata source. `NEWS_API_KEY` is only read when `NEWS_PROVIDER=newsapi`, for local development; release builds strip it and use GDELT. See [`docs/PRODUCTION_NOTES.md`](docs/PRODUCTION_NOTES.md) for provider and release limits.
 
 3. **Firebase**:
    - `app/google-services.json` is already present for the sample project.
@@ -202,9 +206,9 @@ com.aus.gemini01/
 
 ### Firebase Spark Plan Mode
 
-This project is being kept on Firebase's no-cost Spark plan. The app's default Firebase AI Logic backend is the Gemini Developer API; its free-tier models and quotas remain subject to Google's current limits. Cloud Functions and the Secret Manager-backed NewsAPI proxy are not available in this mode, so do not run the deployment commands below. The proxy source is retained as an optional future deployment for a billing-enabled project.
+This project is being kept on Firebase's no-cost Spark plan. The app's default Firebase AI Logic backend is the Gemini Developer API; its free-tier models and quotas remain subject to Google's current limits. The default news source is the keyless [GDELT DOC API](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/), which returns headline metadata and publisher links. GDELT's [terms](https://gdeltproject.org/about.html#termsofuse) permit use with attribution and a link to the project; publisher pages and their content remain subject to their owners' rights. The app therefore omits GDELT-provided images, descriptions, and article text and links readers to publishers.
 
-Leave `NEWS_PROXY_BASE_URL` and `MAPS_API_KEY` unset. The map screen will show the inferred locations as a list; Google Maps Platform requires project billing. A `NEWS_API_KEY` can be used for local development only and is embedded in the APK, so never include it in a distributed build. The NewsAPI Developer plan is limited to development and testing; public distribution needs a news source and usage rights compatible with the intended release.
+GDELT rate-limits its public API, so this client serializes requests, spaces them by at least five seconds, caches query results for five minutes, and caps each query at 75 results. Leave `NEWS_PROXY_BASE_URL` and `MAPS_API_KEY` unset. The map screen shows inferred locations as a list; Google Maps Platform requires project billing. `NEWS_API_KEY` can be used for local development only by setting `NEWS_PROVIDER=newsapi`; release builds clear that key and use GDELT. NewsAPI's Developer plan is limited to development and testing.
 
 ### Optional News Proxy Deployment (requires billing)
 

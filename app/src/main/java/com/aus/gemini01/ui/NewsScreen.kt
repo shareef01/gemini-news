@@ -31,10 +31,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aus.gemini01.BuildConfig
 import coil3.compose.AsyncImage
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.ui.components.EmptyStateView
@@ -486,6 +488,7 @@ fun NewsList(
     onReadingMode: (Article) -> Unit
 ) {
     val listState = rememberLazyListState()
+    val uriHandler = LocalUriHandler.current
 
     LaunchedEffect(listState, articles.size) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
@@ -531,6 +534,17 @@ fun NewsList(
                         modifier = Modifier.size(28.dp),
                         strokeWidth = 2.5.dp
                     )
+                }
+            }
+        }
+
+        if (BuildConfig.NEWS_PROVIDER == "gdelt" && BuildConfig.NEWS_PROXY_BASE_URL.isBlank()) {
+            item {
+                TextButton(
+                    onClick = { uriHandler.openUri("https://www.gdeltproject.org/") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("News data from the GDELT Project")
                 }
             }
         }

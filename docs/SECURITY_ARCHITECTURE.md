@@ -34,10 +34,11 @@ In production deployments, the Android application does **not** hold or transmit
 4. **Scaling Guardrails & Rate Limiting**: Firestore transactions enforce per-installation limits of 30 requests per minute and 200 per UTC day, plus a global provider budget (100 requests per UTC day by default). Only an HMAC of the Firebase Installation ID is stored, and counters receive a 90-day idle-expiration timestamp. Firestore TTL deletes expired documents asynchronously when the policy is active. Function instance/concurrency caps add a separate scaling guardrail; configure the global budget to the verified NewsAPI plan quota and add billing alerts before public distribution.
 
 ### 1.3 Client Proxy-Ready Networking Layer
-The client networking layer (`NewsRepository` and `NewsApiService`) dynamically adapts to the deployment environment:
+The client networking layer (`NewsRepository`, `NewsApiService`, and `GdeltNewsApiService`) adapts to the build configuration:
 - **Optional Proxy Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key, and attaches a fresh limited-use Firebase App Check token in `X-Firebase-AppCheck` plus the Firebase Installation ID in `X-Firebase-Installation-Id` for rate limiting. This prepared Cloud Functions deployment requires billing and is not active in the current Spark project. App Check is installed at application startup so background worker requests are attested too.
-- **Local Development Seam**: For independent local development, developers can supply `NEWS_API_KEY` in `local.properties` (which is excluded from version control via `.gitignore`).
-- **Spark Limitation**: Keep the NewsAPI key out of distributed APKs. If the local development key is absent and no optional proxy is configured, requests fail closed immediately with a descriptive `MissingNewsApiKeyException`.
+- **Spark Default**: `NEWS_PROVIDER=gdelt` uses the keyless GDELT DOC API. The client sends search terms to GDELT, limits request frequency, caches results briefly, and displays GDELT attribution. It maps only title, publisher domain, URL, and seen time; it does not copy article text or images.
+- **Local NewsAPI Development**: Developers may set `NEWS_PROVIDER=newsapi` and `NEWS_API_KEY` in ignored `local.properties`. The key is only read for this debug provider; release builds clear it and use GDELT.
+- **Fail-Closed NewsAPI**: When the NewsAPI provider is explicitly selected and no key is present, requests fail with a descriptive `MissingNewsApiKeyException`.
 
 ---
 
