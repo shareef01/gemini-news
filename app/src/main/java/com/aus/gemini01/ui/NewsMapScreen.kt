@@ -47,7 +47,7 @@ fun NewsMapScreen(
                         horizontalArrangement = Arrangement.spacedBy(Dimens.spaceM)
                     ) {
                         Text(
-                            text = "News Map",
+                            text = if (BuildConfig.MAPS_API_KEY_CONFIGURED) "News Map" else "News Locations",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -97,7 +97,7 @@ fun NewsMapScreen(
             ) {
                 item {
                     Text(
-                        text = "Map rendering is disabled in this build. Location results are listed below; Google Maps requires a configured key and billing-enabled project.",
+                        text = "Map view is unavailable in this build. These approximate locations were inferred from the headlines.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
