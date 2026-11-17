@@ -493,26 +493,47 @@ class AiRepositoryTest {
     fun `sharedWaiters_clearDuringFlight_doesNotRepopulate_TEST_D`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
-        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val testScope = CoroutineScope(SupervisorJob() + dispatcher)
         val repository = repository(dao, telemetry, testScope)
         val remoteStarted = CompletableDeferred<Unit>()
         val releaseRemote = CompletableDeferred<Unit>()
+        val readyCount = AtomicInteger(0)
+        val start = CompletableDeferred<Unit>()
 
-        val callers = List(8) {
-            testScope.async {
-                repository.cachedOrFetch("key_clear_d", AiFeature.READER) {
-                    remoteStarted.complete(Unit)
-                    releaseRemote.await()
-                    "should not persist"
+        try {
+            val callers = List(8) {
+                testScope.async {
+                    readyCount.incrementAndGet()
+                    start.await()
+                    repository.cachedOrFetch("key_clear_d", AiFeature.READER) {
+                        remoteStarted.complete(Unit)
+                        releaseRemote.await()
+                        "should not persist"
+                    }
                 }
             }
-        }
 
-        remoteStarted.await()
-        repository.clearCache()
-        releaseRemote.complete(Unit)
-        callers.forEach { assertEquals("should not persist", it.await()) }
-        assertEquals(0, dao.size())
+            while (readyCount.get() < 8) {
+                kotlinx.coroutines.yield()
+            }
+            start.complete(Unit)
+
+            // The barrier runs after every resumed caller has joined the
+            // in-flight request, but before the owner starts its remote block.
+            val allWaitersJoined = CompletableDeferred<Unit>()
+            testScope.launch { allWaitersJoined.complete(Unit) }
+            allWaitersJoined.await()
+            remoteStarted.await()
+
+            repository.clearCache()
+            releaseRemote.complete(Unit)
+            callers.forEach { assertEquals("should not persist", it.await()) }
+            assertEquals(0, dao.size())
+        } finally {
+            testScope.cancel()
+            dispatcher.close()
+        }
     }
 
     @Test
