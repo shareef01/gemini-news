@@ -46,6 +46,7 @@ android {
 
         buildConfigField("String", "NEWS_API_KEY", "\"$newsApiKey\"")
         buildConfigField("String", "NEWS_PROXY_BASE_URL", "\"$newsProxyBaseUrl\"")
+        buildConfigField("boolean", "MAPS_API_KEY_CONFIGURED", mapsApiKey.isNotBlank().toString())
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = mapsApiKey
     }
 

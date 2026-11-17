@@ -35,9 +35,9 @@ In production deployments, the Android application does **not** hold or transmit
 
 ### 1.3 Client Proxy-Ready Networking Layer
 The client networking layer (`NewsRepository` and `NewsApiService`) dynamically adapts to the deployment environment:
-- **Production Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key, and attaches a fresh limited-use Firebase App Check token in `X-Firebase-AppCheck` plus the Firebase Installation ID in `X-Firebase-Installation-Id` for rate limiting. App Check is installed at application startup so background worker requests are attested too.
+- **Optional Proxy Mode**: When `NEWS_PROXY_BASE_URL` is configured, Retrofit routes all feed and search requests to the proxy without requiring a client-side API key, and attaches a fresh limited-use Firebase App Check token in `X-Firebase-AppCheck` plus the Firebase Installation ID in `X-Firebase-Installation-Id` for rate limiting. This prepared Cloud Functions deployment requires billing and is not active in the current Spark project. App Check is installed at application startup so background worker requests are attested too.
 - **Local Development Seam**: For independent local development, developers can supply `NEWS_API_KEY` in `local.properties` (which is excluded from version control via `.gitignore`).
-- **Fail-Closed Guarantee**: If neither a proxy URL nor a local API key is provided, requests fail closed immediately with a descriptive `MissingNewsApiKeyException`.
+- **Spark Limitation**: Keep the NewsAPI key out of distributed APKs. If the local development key is absent and no optional proxy is configured, requests fail closed immediately with a descriptive `MissingNewsApiKeyException`.
 
 ---
 

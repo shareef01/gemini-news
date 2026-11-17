@@ -188,7 +188,7 @@ com.aus.gemini01/
 3. **Firebase**:
    - `app/google-services.json` is already present for the sample project.
    - To use your own Firebase project, replace it and enable Firebase AI + App Check.
-   - Also update `.firebaserc`, `ALLOWED_APP_ID`, and `serviceAccount` in `functions/index.js` for that project. Provision its default Firestore database near the function region before deploying; Firestore location cannot be changed later. Grant the runtime service account `roles/firebaseappcheck.tokenVerifier` and `roles/datastore.user` on the project, plus `roles/secretmanager.secretAccessor` on the NewsAPI secret.
+   - Also update `.firebaserc`, `ALLOWED_APP_ID`, and `serviceAccount` in `functions/index.js` only if preparing the optional proxy for a billing-enabled project. Provision its default Firestore database near the function region before deploying; Firestore location cannot be changed later. Grant the runtime service account `roles/firebaseappcheck.tokenVerifier` and `roles/datastore.user` on the project, plus `roles/secretmanager.secretAccessor` on the NewsAPI secret.
    - Debug builds use the App Check debug provider; release builds use Play Integrity.
 
 4. **Build and Run**:
@@ -200,7 +200,15 @@ com.aus.gemini01/
    ./gradlew installDebug
    ```
 
-### Deploy the News Proxy
+### Firebase Spark Plan Mode
+
+This project is being kept on Firebase's no-cost Spark plan. The app's default Firebase AI Logic backend is the Gemini Developer API; its free-tier models and quotas remain subject to Google's current limits. Cloud Functions and the Secret Manager-backed NewsAPI proxy are not available in this mode, so do not run the deployment commands below. The proxy source is retained as an optional future deployment for a billing-enabled project.
+
+Leave `NEWS_PROXY_BASE_URL` and `MAPS_API_KEY` unset. The map screen will show the inferred locations as a list; Google Maps Platform requires project billing. A `NEWS_API_KEY` can be used for local development only and is embedded in the APK, so never include it in a distributed build. The NewsAPI Developer plan is limited to development and testing; public distribution needs a news source and usage rights compatible with the intended release.
+
+### Optional News Proxy Deployment (requires billing)
+
+The steps below are reference instructions for a separate billing-enabled deployment; they are not part of this project's Spark configuration.
 
 The Firebase HTTPS function source is under `functions/` and uses the Node.js 22 runtime. Deployment requires Node.js 22, Firebase CLI, and an enabled Cloud Billing account. After billing is attached and the NewsAPI plan permits the intended use, deploy with:
 

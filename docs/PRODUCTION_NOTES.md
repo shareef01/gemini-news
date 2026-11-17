@@ -4,16 +4,22 @@
 > **PROJECT STATUS: IN DEVELOPMENT / PRE-RELEASE — NOT RELEASE READY**
 > This application is currently an active engineering prototype and portfolio project. It is **NOT** release-ready for public consumer distribution or Google Play Store publication. The hardening described in this document represents developer-preview quality; the checklist below must be completed before any production release.
 
+## Active Plan Constraint: Firebase Spark
+
+Keep this Firebase project on the Spark plan; do not link a Cloud Billing account. The Firebase AI Logic client uses the default Gemini Developer API backend, and the selected Gemini Flash model has a no-billing free tier subject to provider quotas and model availability. Cloud Functions and the Secret Manager-backed NewsAPI proxy are unavailable on Spark, so the prepared `functions/` code is not the active news path. Google Maps rendering is also disabled without a billing-backed Maps key; the app shows AI-inferred locations in a list instead. A local `NEWS_API_KEY` remains for development builds only and must not be distributed in an APK.
+
+While staying on Spark, the app can remain a development project. Public release using NewsAPI still requires a distribution-compatible provider plan and publisher-content rights. If a public release is required without billing, replace the NewsAPI integration with a source whose no-cost terms permit the intended use and do not require embedding a secret in the app.
+
 ## 🛑 Production Release Readiness Blockers
 
 The following mandatory steps must be completed before this app can be published for production:
 
-1. **Backend Proxy Deployment and Abuse Controls:** The Firebase HTTPS proxy source is in `functions/`; it validates and consumes one-time App Check tokens for the configured Android Firebase app, stores `NEWS_API_KEY` as a bound Secret Manager secret, limits accepted endpoints and query sizes, enforces Firestore-backed per-installation limits, caps function instances/concurrency, and applies a global daily NewsAPI request budget. Deployment requires an enabled billing account. Enable the 90-day Firestore TTL policy, set the daily budget to the verified NewsAPI plan limit, and configure provider/GCP budget alerts before public distribution.
+1. **News Provider for Distribution:** The prepared Firebase HTTPS proxy can keep a NewsAPI key off-device, but deploying it requires Cloud Functions, Secret Manager, and billing and therefore conflicts with the current Spark constraint. Do not deploy it on this project. Before public distribution, use a provider plan and content rights that permit the intended use, with a server-side secret path that does not expose credentials in the APK.
 2. **Firebase App Check Signing Identity:** App Check enforcement is already active for Firebase AI Logic (`firebaseml.googleapis.com`), and Play Integrity is configured for the Android app. Before release, verify the registered certificate fingerprint matches the Play app-signing certificate used by production builds.
-3. **Google Maps API Key Restrictions:** The Maps Android API is enabled, but Maps use still requires project billing. Once billing and the production signing certificate are available, create a dedicated key restricted to Android package `com.aus.gemini01`, the production certificate's SHA-1 fingerprint, and the Maps SDK for Android API.
+3. **Maps Feature:** Google Maps rendering is intentionally disabled while the project remains on Spark. The map screen falls back to a list of inferred locations and article links, so a Maps API key is not needed for this mode.
 4. **Production Keystore Signing:** Configure Google Play App Signing and manage release upload keys outside source control. Copy `keystore.properties.example` to the ignored `keystore.properties`, create or provide the upload keystore under the ignored `keystore/` directory, and fill in the local credentials. No production signing key is included in this repository.
 5. **License & Terms of Service Compliance:** Confirm the NewsAPI account plan and publisher-content rights before distributing the app. NewsAPI's [Developer plan is limited to development and testing](https://newsapi.org/pricing). Its [terms](https://newsapi.org/terms) say third-party content may remain subject to intellectual-property rights and may not be used without permission or another legal basis; verify rights for any publisher text and images displayed or sent for AI processing.
-6. **Privacy Disclosure:** Update the app privacy notice and Google Play Data safety disclosure to explain that the proxy uses a Firebase Installation ID for rate limiting, stores only an HMAC of the ID, and sets an expiration timestamp 90 days after the last update. Firestore TTL deletes expired counters asynchronously after that policy is enabled.
+6. **Privacy Disclosure:** Before distribution, prepare the app privacy notice and Google Play Data safety disclosure for the actual services enabled in the released build. The Firebase proxy's Firebase Installation ID rate-limit data applies only if that optional backend is deployed; it is not sent when the Spark build uses the local direct NewsAPI development path.
 
 ## NewsAPI key model & Backend Proxy Architecture
 
@@ -41,11 +47,11 @@ Cleartext HTTP traffic is disabled across production builds:
 * No `NEWS_PROXY_BASE_URL` or `MAPS_API_KEY` is configured in this workspace.
 * No `keystore.properties` or upload keystore is present. The example file documents the expected local format only.
 * The locally configured NewsAPI key's account plan and publisher-specific rights have not been verified.
-* The Firebase project has Cloud Functions and Firestore APIs enabled. Its default Standard Firestore database was created in `europe-west3` with delete protection; the dedicated runtime service account has App Check Token Verifier and Datastore User roles. Billing is disabled and no billing account is available to the authenticated account, so the proxy is not deployed and its Secret Manager secret is not set.
-* Per-installation counter documents store an HMAC of the Firebase Installation ID and receive an expiration timestamp 90 days after the last update. The Firestore TTL policy is not enabled yet; enable it after billing is linked, noting TTL deletes are billable and occur asynchronously. The app's privacy notice and Play Data safety disclosure must explain this use and retention before release.
+* The Firebase project remains on Spark. The prepared Cloud Function and its Firestore rate limiter are not deployed; the NewsAPI secret is not in Secret Manager. Firestore's default database and deny-all rules remain provisioned but are unused by the Spark news path.
+* The Maps API has no key configured. In this free-plan build the map screen lists inferred locations and article links without requesting Google Maps tiles.
 * Firebase App Check enforcement is active for Firebase AI Logic. The proxy source enables App Check enforcement and replay protection. The project's registered Play Integrity certificate fingerprint has not been matched against the production Play signing certificate.
-* The Maps Android API is enabled, but project billing is disabled, so Maps requests cannot be used. There is no Maps key configured or restricted for this app.
-* `NEWS_API_DAILY_REQUEST_LIMIT` defaults to 100 and must be set no higher than the verified NewsAPI plan quota. The runtime service account still needs Secret Manager Secret Accessor on `NEWS_API_KEY` after the secret is created.
+* The project must not be linked to billing under the current plan constraint. Do not enable the optional proxy's TTL cleanup or deploy its function.
+* The optional proxy's `NEWS_API_DAILY_REQUEST_LIMIT` defaults to 100 and must be set within the verified NewsAPI plan quota if it is ever deployed on a billing-enabled project. This setting is inactive in Spark mode.
 
 ## External Article Navigation (Android Custom Tabs)
 
