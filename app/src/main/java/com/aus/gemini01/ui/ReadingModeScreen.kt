@@ -14,7 +14,9 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,16 +24,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aus.gemini01.data.Article
 import com.aus.gemini01.data.ai.AiResult
 import com.aus.gemini01.data.ai.friendlyMessage
-import com.aus.gemini01.ui.components.ErrorStateView
 import com.aus.gemini01.ui.components.PulseIndicator
 import com.aus.gemini01.ui.theme.Dimens
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadingModeScreen(
+    article: Article,
     result: AiResult,
     isSpeaking: Boolean,
     onBack: () -> Unit,
@@ -71,13 +76,85 @@ fun ReadingModeScreen(
                     modifier = Modifier
                         .padding(innerPadding)
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    contentAlignment = Alignment.Center
                 ) {
-                    ErrorStateView(
-                        title = "Could not format story",
-                        message = result.error.friendlyMessage(),
-                        onRetry = onRetry,
-                        actionLabel = "Retry AI Reader"
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = Dimens.readingMeasureMax)
+                            .padding(horizontal = Dimens.gutterReading, vertical = Dimens.spaceXXXL),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.errorContainer
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WarningAmber,
+                                contentDescription = null,
+                                modifier = Modifier.padding(Dimens.spaceXXL).size(Dimens.iconSizeXL),
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(Dimens.spaceXXL))
+                        Text(
+                            text = "Reader view unavailable",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(Dimens.spaceS))
+                        Text(
+                            text = article.source.name,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(Dimens.spaceM))
+                        Text(
+                            text = article.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        article.description?.takeIf(String::isNotBlank)?.let { description ->
+                            Spacer(modifier = Modifier.height(Dimens.spaceS))
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(Dimens.spaceL))
+                        Text(
+                            text = result.error.friendlyMessage(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(Dimens.spaceXXL))
+                        Button(
+                            onClick = onOpenInWeb,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.large
+                        ) {
+                            Icon(Icons.Default.Public, contentDescription = null)
+                            Spacer(modifier = Modifier.width(Dimens.spaceS))
+                            Text("Open original story")
+                        }
+                        TextButton(onClick = onRetry) {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                            Spacer(modifier = Modifier.width(Dimens.spaceS))
+                            Text("Try again")
+                        }
+                    }
                 }
             }
         }
