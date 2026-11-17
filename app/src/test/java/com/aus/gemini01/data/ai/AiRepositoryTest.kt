@@ -8,9 +8,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -20,6 +23,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
@@ -337,60 +341,74 @@ class AiRepositoryTest {
     fun `failedSharedRequest_50Waiters_recordsOneErrorAndCleansInflight`() = runBlocking {
         val dao = FakeAiResultDao()
         val telemetry = FakeAiTelemetry()
-        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val testScope = CoroutineScope(SupervisorJob() + dispatcher)
         val repository = repository(dao, telemetry, testScope)
         val fetchCount = AtomicInteger(0)
         val readyCount = AtomicInteger(0)
         val start = CompletableDeferred<Unit>()
         val hold = CompletableDeferred<Unit>()
 
-        val jobs = List(50) {
-            testScope.async {
-                readyCount.incrementAndGet()
-                start.await()
-                repository.cachedOrFetch("key_fail_50", AiFeature.SUMMARY) {
-                    fetchCount.incrementAndGet()
-                    hold.await()
-                    throw RuntimeException("429 quota")
+        try {
+            val jobs = List(50) {
+                testScope.async {
+                    readyCount.incrementAndGet()
+                    start.await()
+                    repository.cachedOrFetch("key_fail_50", AiFeature.SUMMARY) {
+                        fetchCount.incrementAndGet()
+                        hold.await()
+                        throw RuntimeException("429 quota")
+                    }
                 }
             }
-        }
-        while (readyCount.get() < 50) {
-            kotlinx.coroutines.yield()
-        }
-        start.complete(Unit)
-        while (fetchCount.get() < 1) {
-            kotlinx.coroutines.yield()
-        }
-        hold.complete(Unit)
+            while (readyCount.get() < 50) {
+                kotlinx.coroutines.yield()
+            }
+            start.complete(Unit)
 
-        var failures = 0
-        jobs.forEach { job ->
+            // Queue a barrier behind the 50 resumed callers. The single-thread
+            // dispatcher ensures each caller joins the shared Deferred before
+            // the owner is released to fail and remove it from the in-flight map.
+            val allWaitersJoined = CompletableDeferred<Unit>()
+            testScope.launch { allWaitersJoined.complete(Unit) }
+            allWaitersJoined.await()
+            while (fetchCount.get() < 1) {
+                kotlinx.coroutines.yield()
+            }
+            assertEquals(1, fetchCount.get())
+            hold.complete(Unit)
+
+            var failures = 0
+            jobs.forEach { job ->
+                try {
+                    job.await()
+                    fail("Expected AiRequestException")
+                } catch (_: AiRequestException) {
+                    failures++
+                }
+            }
+
+            assertEquals(50, failures)
+            assertEquals(1, fetchCount.get())
+            assertEquals(1, telemetry.cacheMisses.size)
+            assertEquals(1, telemetry.requests.size)
+            assertEquals(1, telemetry.errors.size)
+            assertNull(dao.get("key_fail_50"))
+
+            var secondFetch = 0
             try {
-                job.await()
+                repository.cachedOrFetch("key_fail_50", AiFeature.SUMMARY) {
+                    secondFetch++
+                    throw RuntimeException("429 again")
+                }
                 fail("Expected AiRequestException")
             } catch (_: AiRequestException) {
-                failures++
             }
+            assertEquals(1, secondFetch)
+        } finally {
+            testScope.cancel()
+            dispatcher.close()
         }
-
-        assertEquals(50, failures)
-        assertEquals(1, fetchCount.get())
-        assertEquals(1, telemetry.cacheMisses.size)
-        assertEquals(1, telemetry.requests.size)
-        assertEquals(1, telemetry.errors.size)
-        assertNull(dao.get("key_fail_50"))
-
-        var secondFetch = 0
-        try {
-            repository.cachedOrFetch("key_fail_50", AiFeature.SUMMARY) {
-                secondFetch++
-                throw RuntimeException("429 again")
-            }
-            fail("Expected AiRequestException")
-        } catch (_: AiRequestException) {
-        }
-        assertEquals(1, secondFetch)
     }
 
     @Test
