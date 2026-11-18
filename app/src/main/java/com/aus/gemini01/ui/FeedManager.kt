@@ -56,10 +56,12 @@ class FeedManager(
     private var fetchJob: Job? = null
     private var searchJob: Job? = null
     private var pageJob: Job? = null
+    private var fetchGeneration = 0L
+    private var searchGeneration = 0L
     var forYouKeywords: String = ""
 
     fun selectCategory(category: String, countryCode: String) {
-        if (_selectedCategory.value != category) {
+        if (_selectedCategory.value != category || _searchQuery.value.isNotBlank()) {
             _selectedCategory.value = category
             _searchQuery.value = ""
             fetchNews(category = category, countryCode = countryCode)
@@ -71,9 +73,10 @@ class FeedManager(
         countryCode: String = "us",
         isRefresh: Boolean = false
     ) {
-        if (isRefresh) {
-            _isRefreshing.value = true
-        } else {
+        val generation = ++fetchGeneration
+        searchGeneration++
+        _isRefreshing.value = isRefresh
+        if (!isRefresh) {
             _uiState.value = NewsUiState.Loading
         }
 
@@ -121,7 +124,7 @@ class FeedManager(
                 _cachedAt.value = null
                 _uiState.value = NewsUiState.Error(newsFeedErrorMessage(e))
             } finally {
-                _isRefreshing.value = false
+                if (generation == fetchGeneration) _isRefreshing.value = false
             }
         }
     }
@@ -165,20 +168,23 @@ class FeedManager(
         }
     }
 
-    fun searchNews(query: String) {
+    fun searchNews(query: String, isRefresh: Boolean = false) {
+        val generation = ++searchGeneration
+        fetchGeneration++
         _searchQuery.value = query
         searchJob?.cancel()
         fetchJob?.cancel()
         pageJob?.cancel()
 
         if (query.isBlank()) {
-            fetchNews()
+            fetchNews(isRefresh = isRefresh)
             return
         }
 
         currentPage = 1
         isLastPage = false
-        _uiState.value = NewsUiState.Loading
+        _isRefreshing.value = isRefresh
+        if (!isRefresh) _uiState.value = NewsUiState.Loading
 
         searchJob = scope.launch(Dispatchers.IO) {
             delay(400)
@@ -193,6 +199,8 @@ class FeedManager(
                 _isServingCached.value = false
                 _cachedAt.value = null
                 _uiState.value = NewsUiState.Error(newsFeedErrorMessage(e))
+            } finally {
+                if (generation == searchGeneration) _isRefreshing.value = false
             }
         }
     }
@@ -225,6 +233,8 @@ class FeedManager(
         _pendingArticleUrl.value = url
         val visible = (_uiState.value as? NewsUiState.Success)?.articles.orEmpty()
         if (visible.none { it.url == url }) {
+            _selectedCategory.value = "general"
+            _searchQuery.value = ""
             fetchNews(category = "general", countryCode = countryCode)
         }
     }

@@ -10,6 +10,7 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -205,6 +206,8 @@ class NewsRepository(
     private val gdeltApiService: GdeltNewsApiService by lazy { createGdeltApiService() }
     private val gdeltCacheMutex = Mutex()
     private val gdeltCache = mutableMapOf<String, Pair<Long, List<Article>>>()
+    private val feedCacheMutex = Mutex()
+    private var feedCacheGeneration = 0L
 
     private suspend fun getGdeltArticles(
         query: String,
@@ -259,6 +262,7 @@ class NewsRepository(
     ): FeedResult {
         val effectiveCategory = category ?: "general"
         var isGdeltRequest = false
+        val cacheGeneration = feedCacheMutex.withLock { feedCacheGeneration }
 
         return try {
             val proxyUrl = proxyUrlProvider()
@@ -300,18 +304,22 @@ class NewsRepository(
             if (shouldReplaceFeedCache(page, category, articles.size)) {
                 val fetchedAt = System.currentTimeMillis()
                 val cutoff = fetchedAt - CACHE_TTL_DAYS * 24 * 60 * 60 * 1000
-                newsDao.replaceCachedArticles(
-                    category = effectiveCategory,
-                    country = countryCode,
-                    articles = articles.map {
-                        it.toCachedEntity(
+                feedCacheMutex.withLock {
+                    if (feedCacheGeneration == cacheGeneration) {
+                        newsDao.replaceCachedArticles(
                             category = effectiveCategory,
                             country = countryCode,
-                            cachedAt = fetchedAt
+                            articles = articles.map {
+                                it.toCachedEntity(
+                                    category = effectiveCategory,
+                                    country = countryCode,
+                                    cachedAt = fetchedAt
+                                )
+                            },
+                            cutoffEpochMs = cutoff
                         )
-                    },
-                    cutoffEpochMs = cutoff
-                )
+                    }
+                }
             }
 
             FeedResult(articles, fromCache = false)
@@ -397,7 +405,11 @@ class NewsRepository(
     }
 
     suspend fun clearCache() {
-        newsDao.clearCache()
+        feedCacheMutex.withLock {
+            feedCacheGeneration++
+            gdeltCacheMutex.withLock { gdeltCache.clear() }
+            newsDao.clearCache()
+        }
     }
 
     suspend fun clearHistory() {

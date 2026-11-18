@@ -227,6 +227,35 @@ function sanitizeSuccess(payload) {
   };
 }
 
+async function readBoundedBody(response, maxBytes) {
+  if (!response.body) return "";
+
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    await response.body.cancel();
+    throw new RequestError(502, "News provider response is too large");
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel();
+        throw new RequestError(502, "News provider response is too large");
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, totalBytes).toString("utf8");
+}
+
 exports.newsProxy = onRequest(
   {
     region: "europe-west3",
@@ -274,11 +303,7 @@ exports.newsProxy = onRequest(
         return;
       }
 
-      const body = await upstream.text();
-      if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES) {
-        fail(res, 502, "News provider response is too large");
-        return;
-      }
+      const body = await readBoundedBody(upstream, MAX_RESPONSE_BYTES);
 
       let payload;
       try {

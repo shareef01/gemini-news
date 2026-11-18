@@ -69,8 +69,8 @@ class AiCacheKeysTest {
 
     @Test
     fun `model constant matches configured model`() {
-        assertEquals("gemini-3.8-flash", GEMINI_MODEL)
-        assertEquals("Gemini 3.8 Flash", GEMINI_MODEL_LABEL)
+        assertEquals("gemini-3.5-flash-lite", GEMINI_MODEL)
+        assertEquals("Gemini 3.5 Flash Lite", GEMINI_MODEL_LABEL)
         assertTrue(!GEMINI_MODEL.endsWith("-latest"))
     }
 
