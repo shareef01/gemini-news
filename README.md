@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Kotlin-2.4.21-purple.svg?style=flat-square&logo=kotlin" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Jetpack_Compose-Material_3-4285F4.svg?style=flat-square&logo=jetpackcompose" alt="Compose" />
-  <img src="https://img.shields.io/badge/AI-Google_Gemini_Vertex_AI-orange.svg?style=flat-square&logo=google" alt="Gemini" />
+  <img src="https://img.shields.io/badge/AI-Firebase_AI_Logic-orange.svg?style=flat-square&logo=google" alt="Firebase AI Logic" />
   <img src="https://img.shields.io/badge/Architecture-MVVM_Clean_StateFlow-green.svg?style=flat-square" alt="Architecture" />
   <img src="https://img.shields.io/badge/Android_Target-API_37-3DDC84.svg?style=flat-square&logo=android" alt="Android" />
   <img src="https://img.shields.io/badge/Min_SDK-API_31-3DDC84.svg?style=flat-square&logo=android" alt="Min SDK" />
@@ -29,50 +29,40 @@
 
 **Gemini News** is a next-generation Android news reader that combines real-time global news aggregation with **Google Gemini AI**. Instead of presenting endless walls of unfiltered articles, Gemini News synthesizes, contextualizes, and delivers distraction-free reporting tailored to your reading preferences.
 
-Built with **100% Jetpack Compose**, **Material 3 Adaptive Design**, **Firebase Vertex AI**, and a resilient **Offline-First Room Architecture**, the app delivers desktop-grade fluidity on phones, foldables, and tablets.
+Built with **Jetpack Compose**, **Material 3**, **Firebase AI Logic**, and a resilient **offline-first Room architecture**, Gemini News brings its feed and reading tools to Android phones.
 
 ---
 
 ## 📱 Screenshots Showcase
 
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" width="33%">
-        <img src="docs/screenshots/01_home_feed.png" alt="Home Feed" /><br />
-        <b>📰 Top Stories & Categories</b><br />
-        <i>Modern card feeds with quick reader & summary actions</i>
-      </td>
-      <td align="center" width="33%">
-        <img src="docs/screenshots/02_ai_summary.png" alt="AI Summary" /><br />
-        <b>✨ Gemini Insights</b><br />
-        <i>Structured takeaways, sentiment pills & key entities</i>
-      </td>
-      <td align="center" width="33%">
-        <img src="docs/screenshots/03_reader_mode.png" alt="Reader Mode" /><br />
-        <b>📖 AI Reader View</b><br />
-        <i>Distraction-free Markdown reader with Text-to-Speech</i>
-      </td>
-    </tr>
-    <tr>
-      <td align="center" width="33%">
-        <img src="docs/screenshots/05_trending_topics.png" alt="Global Trends" /><br />
-        <b>🔥 Global News Trends</b><br />
-        <i>Macro-narrative synthesis across global events</i>
-      </td>
-      <td align="center" width="33%">
-        <img src="docs/screenshots/04_ai_chat.png" alt="News Expert Chat" /><br />
-        <b>💬 News Expert Chat</b><br />
-        <i>Conversational AI briefed on today's headlines</i>
-      </td>
-      <td align="center" width="33%">
-        <img src="docs/screenshots/06_settings.png" alt="Settings" /><br />
-        <b>⚙️ Settings & Privacy</b><br />
-        <i>US headlines, AI language, and quota management</i>
-      </td>
-    </tr>
-  </table>
-</div>
+The screenshots are from the Pixel debug build with NewsAPI enabled; the repository's release configuration defaults to keyless GDELT on Firebase Spark.
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/01_home_feed.png" width="260" alt="Gemini News home feed with search, categories, and story actions" /><br />
+      <b>📰 Home Feed</b><br />
+      <i>Search, category navigation, and story actions</i>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/02_reader_mode.png" width="260" alt="Reader View showing a headline and source information" /><br />
+      <b>📖 Reader View</b><br />
+      <i>Readable story fields with publisher attribution</i>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/03_news_expert.png" width="260" alt="News Expert chat with suggested questions" /><br />
+      <b>💬 News Expert</b><br />
+      <i>Suggested questions and conversational news context</i>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/04_settings.png" width="260" alt="Gemini News settings for region, language, AI model, and notifications" /><br />
+      <b>⚙️ Settings</b><br />
+      <i>Feed preferences, AI model, and free-tier data controls</i>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -80,9 +70,9 @@ Built with **100% Jetpack Compose**, **Material 3 Adaptive Design**, **Firebase 
 
 ### 🧠 Gemini AI Intelligence
 - **Gemini Insights (Smart Summaries)**: One-tap analysis generating structured **Key Takeaways**, **Sentiment & Tone** badges, and **Key Entities**.
-- **Distraction-Free AI Reader Mode**: Reformats the NewsAPI title/description/content into clean Markdown with custom font scaling and typography. This does **not** download publisher HTML or bypass paywalls.
+- **Reader View**: Formats the story fields supplied by the selected news provider with reading controls. It does **not** download publisher HTML or bypass paywalls; metadata-only feeds link readers to the publisher for the full article.
 - **Global News Trends**: Synthesizes cross-outlet reporting into the top macro-narratives shaping the world right now.
-- **AI News Map**: Extracts geographic locations mentioned in headlines and renders them on an interactive Google Maps globe.
+- **AI News Map**: Extracts geographic locations mentioned in headlines. On the Spark configuration, locations are shown in a list; Google Maps rendering requires a billing-backed Maps API setup.
 - **Conversational News Expert**: Chat directly with Gemini about breaking news, background context, or historical parallels.
 - **Personalized "For You" Feed**: Semantic recommendations derived from your on-device reading history and saved bookmarks.
 - **Weekly News Digest & Personality**: Analyzes your reading habits to deliver creative summaries and personal news archetypes.
@@ -144,7 +134,7 @@ com.aus.gemini01/
 | **Language** | Kotlin 2.4.21 |
 | **UI Framework** | Jetpack Compose (BOM 2026.08.00) & Material 3 |
 | **Adaptive UI** | AndroidX Compose Material3 Adaptive (1.3.0) |
-| **AI / LLM** | Google Gemini (`gemini-3.8-flash`, pinned) via Firebase AI |
+| **AI / LLM** | Google Gemini (`gemini-3.5-flash-lite`, pinned) via Firebase AI Logic |
 | **Networking** | Retrofit 3.0.0, OkHttp (transitive), Kotlinx Serialization |
 | **Database** | Room 2.8.4 (with KSP) |
 | **Preferences** | AndroidX DataStore 1.2.1 |
@@ -193,7 +183,7 @@ com.aus.gemini01/
    - `app/google-services.json` is already present for the sample project.
    - To use your own Firebase project, replace it and enable Firebase AI + App Check.
    - Also update `.firebaserc`, `ALLOWED_APP_ID`, and `serviceAccount` in `functions/index.js` only if preparing the optional proxy for a billing-enabled project. Provision its default Firestore database near the function region before deploying; Firestore location cannot be changed later. Grant the runtime service account `roles/firebaseappcheck.tokenVerifier` and `roles/datastore.user` on the project, plus `roles/secretmanager.secretAccessor` on the NewsAPI secret.
-   - Debug builds use the App Check debug provider; release builds use Play Integrity.
+   - Debug builds use the App Check debug provider; register the generated debug token in Firebase App Check before using AI features. Release builds use Play Integrity.
 
 4. **Build and Run**:
    ```bash
