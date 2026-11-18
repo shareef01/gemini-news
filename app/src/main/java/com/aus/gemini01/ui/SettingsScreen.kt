@@ -464,8 +464,13 @@ private fun AiDiagnosticsCard(viewModel: NewsViewModel) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        val totalRequests = d.requestsByFeature.values.sum()
-                        val topFeature = d.requestsByFeature.maxByOrNull { it.value }?.key
+                        val requestsByFeature = d.requestsByFeature.filterKeys { !it.startsWith("cached_") }
+                        val storedResultCount = d.requestsByFeature
+                            .filterKeys { it.startsWith("cached_") }
+                            .values
+                            .sum()
+                        val totalRequests = requestsByFeature.values.sum()
+                        val topFeature = requestsByFeature.maxByOrNull { it.value }?.key
 
                         Text(
                             "• Total AI Requests: $totalRequests",
@@ -477,9 +482,14 @@ private fun AiDiagnosticsCard(viewModel: NewsViewModel) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (topFeature != null && d.requestsByFeature[topFeature]!! > 0) {
+                        Text(
+                            "• Stored AI Results: $storedResultCount",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (topFeature != null && requestsByFeature[topFeature]!! > 0) {
                             Text(
-                                "• Top Feature: ${topFeature.replace('_', ' ')} (${d.requestsByFeature[topFeature]} calls)",
+                                "• Top Feature: ${topFeature.replace('_', ' ')} (${requestsByFeature[topFeature]} calls)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

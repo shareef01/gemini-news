@@ -26,6 +26,7 @@ import com.aus.gemini01.data.feedOrAiErrorMessage
 import com.aus.gemini01.data.local.AppDatabase
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.type.content
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -87,7 +88,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         telemetry = DataStoreAiTelemetry(application)
     )
     private val ttsManager = TtsManager(application)
-    private val generativeModel = Firebase.ai.generativeModel(
+    private val generativeModel = Firebase.ai(backend = GenerativeBackend.googleAI()).generativeModel(
         modelName = GEMINI_MODEL,
         systemInstruction = content {
             text(
@@ -217,6 +218,11 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     fun fetchNews(category: String? = selectedCategory.value, isUserPull: Boolean = false) {
         val targetCategory = category ?: "general"
 
+        if (isUserPull && searchQuery.value.isNotBlank()) {
+            feedManager.searchNews(searchQuery.value, isRefresh = true)
+            return
+        }
+
         if (targetCategory == "bookmarks") {
             feedManager.selectCategory("bookmarks", countryCode.value)
             return
@@ -247,11 +253,23 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         updateDynamicShortcuts(targetCategory)
-        feedManager.fetchNews(
-            category = targetCategory,
-            countryCode = countryCode.value,
-            isRefresh = isUserPull
-        )
+        if (isUserPull) {
+            feedManager.fetchNews(
+                category = targetCategory,
+                countryCode = countryCode.value,
+                isRefresh = true
+            )
+        } else if (targetCategory == selectedCategory.value && searchQuery.value.isBlank()) {
+            // selectCategory intentionally skips unchanged values. The initial
+            // general feed and an explicit tap on the active category still
+            // need to issue a request.
+            feedManager.fetchNews(
+                category = targetCategory,
+                countryCode = countryCode.value
+            )
+        } else {
+            feedManager.selectCategory(targetCategory, countryCode.value)
+        }
     }
 
     private fun fetchForYouNews() {
@@ -288,7 +306,12 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 """.trimIndent()
 
                 val keywords = aiRepository.cachedOrFetch(
-                    cacheKey = AiCacheKeys.forYouKeywords(recentArticles.map { it.url }),
+                    cacheKey = AiCacheKeys.forYouKeywords(
+                        interactionUrls = recentArticles.map { it.url },
+                        evidenceFingerprints = recentArticles.map {
+                            AiCacheKeys.articleEvidenceFingerprint(it.title, null, null)
+                        }
+                    ),
                     feature = AiFeature.FOR_YOU
                 ) {
                     withTimeout(90_000) { generativeModel.generateContent(prompt) }.text?.trim()
@@ -299,11 +322,11 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 val articles = repository.searchNews(keywords, 1)
                 feedManager.setSuccessArticles(articles)
             } catch (e: TimeoutCancellationException) {
-                feedManager.fetchNews("general", countryCode.value)
+                feedManager.selectCategory("general", countryCode.value)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                feedManager.fetchNews("general", countryCode.value)
+                feedManager.selectCategory("general", countryCode.value)
             } finally {
                 insightsManager.setAnalysingInterests(false)
             }

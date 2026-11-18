@@ -102,6 +102,7 @@ fun NewsChatScreen(
         },
         bottomBar = {
             Surface(
+                modifier = Modifier.imePadding(),
                 tonalElevation = 3.dp,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
@@ -109,8 +110,7 @@ fun NewsChatScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = Dimens.gutterDefault, vertical = Dimens.spaceM)
-                        .navigationBarsPadding()
-                        .imePadding(),
+                        .navigationBarsPadding(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(

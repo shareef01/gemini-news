@@ -251,7 +251,15 @@ class InsightsManager(
                 val text = aiRepository.cachedOrFetch(
                     cacheKey = AiCacheKeys.stats(
                         recentArticles.map { it.url },
-                        preferredLanguage
+                        preferredLanguage,
+                        recentArticles.map {
+                            AiCacheKeys.articleEvidenceFingerprint(
+                                title = it.title,
+                                description = null,
+                                content = null,
+                                sourceName = it.source.name
+                            )
+                        }
                     ),
                     feature = AiFeature.STATS
                 ) {

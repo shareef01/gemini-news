@@ -59,19 +59,41 @@ fun AdaptiveNewsScreen(
     var showLocations by rememberSaveable { mutableStateOf(false) }
     var moreActionsExpanded by remember { mutableStateOf(false) }
 
-    // Notification taps may arrive before the feed has loaded. Resolve the
-    // validated URL against loaded NewsAPI/Room data before opening WebView.
+    // Notification taps may arrive before the feed has loaded. Prefer the full
+    // article from the feed; use the validated external URL if it has aged out.
     LaunchedEffect(pendingArticleUrl, uiState) {
         val pending = pendingArticleUrl ?: return@LaunchedEffect
-        val article = (uiState as? NewsUiState.Success)?.articles?.firstOrNull { it.url == pending }
-            ?: return@LaunchedEffect
-        viewModel.clearPendingArticleUrl()
-        selectedArticleForWeb = article
-        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
+        when (val state = uiState) {
+            NewsUiState.Loading -> return@LaunchedEffect
+            is NewsUiState.Success -> {
+                val article = state.articles.firstOrNull { it.url == pending }
+                viewModel.clearPendingArticleUrl()
+                if (article != null) {
+                    selectedArticleForWeb = article
+                    navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
+                } else if (!ArticleNavigator.openArticle(context, pending)) {
+                    snackbarHostState.showSnackbar("Couldn't open this article.")
+                }
+            }
+            is NewsUiState.Error -> {
+                viewModel.clearPendingArticleUrl()
+                if (!ArticleNavigator.openArticle(context, pending)) {
+                    snackbarHostState.showSnackbar("Couldn't open this article.")
+                }
+            }
+        }
     }
 
     // Logic to decide what goes in the detail pane
     val currentDetailArticle = navigator.currentDestination?.contentKey
+    val navigateBackFromDetail: () -> Unit = {
+        if (selectedArticleForWeb != null) {
+            selectedArticleForWeb = null
+        } else {
+            viewModel.clearReaderView()
+        }
+        coroutineScope.launch { navigator.navigateBack() }
+    }
     val openArticleFromAuxiliary: (Article) -> Unit = { article ->
         showSettings = false
         showChat = false
@@ -145,6 +167,9 @@ fun AdaptiveNewsScreen(
             )
         }
     } else {
+        BackHandler(enabled = currentDetailArticle != null) {
+            navigateBackFromDetail()
+        }
         ListDetailPaneScaffold(
             directive = navigator.scaffoldDirective,
             value = navigator.scaffoldValue,
@@ -243,10 +268,7 @@ fun AdaptiveNewsScreen(
                                 article = currentDetailArticle,
                                 result = readerViewContent!!,
                                 isSpeaking = isSpeaking,
-                                onBack = { 
-                                    viewModel.clearReaderView()
-                                    coroutineScope.launch { navigator.navigateBack() }
-                                },
+                                onBack = navigateBackFromDetail,
                                 onOpenInWeb = { 
                                     ArticleNavigator.openArticle(context, currentDetailArticle.url)
                                 },
@@ -262,10 +284,7 @@ fun AdaptiveNewsScreen(
                             ArticleWebView(
                                 url = selectedArticleForWeb!!.url,
                                 title = selectedArticleForWeb!!.title,
-                                onBack = { 
-                                    selectedArticleForWeb = null
-                                    coroutineScope.launch { navigator.navigateBack() }
-                                }
+                                onBack = navigateBackFromDetail
                             )
                         } else {
                             com.aus.gemini01.ui.components.ReaderViewShimmer()

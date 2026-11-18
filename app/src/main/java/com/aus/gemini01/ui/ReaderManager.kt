@@ -91,7 +91,12 @@ class ReaderManager(
                     cacheKey = AiCacheKeys.reader(
                         article.url,
                         preferredLanguage,
-                        AiCacheKeys.articleEvidenceFingerprint(article.title, article.description, article.content)
+                        AiCacheKeys.articleEvidenceFingerprint(
+                            article.title,
+                            article.description,
+                            article.content,
+                            article.source.name
+                        )
                     ),
                     feature = AiFeature.READER,
                     articleUrl = article.url

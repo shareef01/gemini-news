@@ -1,6 +1,7 @@
 package com.aus.gemini01.data
 
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Query
 
 interface NewsApiService {
@@ -10,7 +11,7 @@ interface NewsApiService {
         @Query("category") category: String? = null,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 20,
-        @Query("apiKey") apiKey: String? = null
+        @Header("X-Api-Key") apiKey: String? = null
     ): NewsResponse
 
     @GET("v2/everything")
@@ -18,6 +19,6 @@ interface NewsApiService {
         @Query("q") query: String,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 20,
-        @Query("apiKey") apiKey: String? = null
+        @Header("X-Api-Key") apiKey: String? = null
     ): NewsResponse
 }
