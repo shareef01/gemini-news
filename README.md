@@ -20,8 +20,8 @@
 </p>
 
 > [!WARNING]
-> **Project Status: In Development (Pre-Release / Developer Preview)**
-> This application is currently under active engineering development and is **not release-ready** for public distribution or Google Play Store publication. See [Production Notes](docs/PRODUCTION_NOTES.md) for remaining production blockers (such as backend proxy deployment, Play Integrity enforcement, Maps API restrictions, and production release signing).
+> **Android app status: In Development (Pre-Release / Developer Preview)**
+> The app binary is not ready for consumer distribution or Google Play publication. This warning is about releasing the Android app; the source repository can be published on GitHub. See [Production Notes](docs/PRODUCTION_NOTES.md) for app release requirements.
 
 ---
 

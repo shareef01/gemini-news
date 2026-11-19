@@ -32,6 +32,16 @@ The current branch is Room v7. This review fixed the proxy-token gap, restricted
 - `keystore.properties.example` documents the expected local signing fields; no signing key or passwords were generated.
 - Kotlin Gradle Plugin and KSP were updated to compatible current releases. The AGP 9.5.1 advisory remains deferred: Android requires Gradle 9.6.0 for AGP 9.5.x, and Kotlin's fully supported AGP range currently ends at 9.3.1. This project remains on AGP 9.3.1 / Gradle 9.5.0 rather than crossing that compatibility boundary.
 
+## Audit follow-up — 2026-11-19
+
+- GDELT search fallback now preserves the original fetch timestamp after HTTP 429 and marks stale in-memory results in the UI. The fallback no longer renews its own five-minute freshness window.
+- Clearing the saved headline and AI cache no longer triggers an immediate feed request that repopulates the saved headline cache. The settings copy now explains that visible stories remain until the user refreshes.
+- Article image URLs receive structural HTTPS validation, and Coil uses a dedicated OkHttp DNS guard that rejects private/local destinations for each host resolution, including redirects.
+- CI now grants the workflow token `contents: read` only. AI evidence documentation now accurately states that generated summary/reader text is unverified and the lexical parser is not connected to those flows.
+- `npm audit` reported no Node dependency advisories. OSV queries against 252 resolved Maven runtime coordinates returned no advisories. This does not replace future scans or review of external Firebase, Play Integrity, and GitHub settings.
+- No unit tests, lint, instrumentation, or app build were rerun after this follow-up. Gradle dependency graph resolution succeeded; AGP emitted its existing warning that `android.disallowKotlinSourceSets=false` is experimental.
+- Release signing, Play Integrity certificate matching, privacy disclosures, and publisher/source rights remain external gates for distributing the Android app binary; they do not block publishing the source repository on GitHub.
+
 ## Validation and limitations
 
 The unit, lint, and instrumented results below are from the earlier baseline. The Android debug build passed after adding the Spark-mode Maps fallback and again after making GDELT the keyless default and clearing development keys from release variants. A raw GDELT request returned valid JSON, then a subsequent request returned HTTP 429; the new Retrofit path was not exercised against the live endpoint. The Firebase function received a Node syntax check but was not deployed.

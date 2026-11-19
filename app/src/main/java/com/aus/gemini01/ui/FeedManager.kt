@@ -106,10 +106,10 @@ class FeedManager(
                 }
 
                 if (category == "for_you" && forYouKeywords.isNotBlank()) {
-                    val searchResult = repository.searchNews(query = forYouKeywords, page = 1)
-                    _uiState.value = NewsUiState.Success(searchResult)
-                    _isServingCached.value = false
-                    _cachedAt.value = null
+                    val searchResult = repository.searchNewsResult(query = forYouKeywords, page = 1)
+                    _uiState.value = NewsUiState.Success(searchResult.articles)
+                    _isServingCached.value = searchResult.fromCache
+                    _cachedAt.value = searchResult.cachedAt
                     return@launch
                 }
 
@@ -141,13 +141,16 @@ class FeedManager(
         pageJob?.cancel()
         pageJob = scope.launch(Dispatchers.IO) {
             try {
-                val newArticles = if (_searchQuery.value.isNotBlank()) {
-                    repository.searchNews(_searchQuery.value, pageToLoad)
+                val result = if (_searchQuery.value.isNotBlank()) {
+                    repository.searchNewsResult(_searchQuery.value, pageToLoad)
                 } else if (categoryAtStart == "for_you" && forYouKeywords.isNotBlank()) {
-                    repository.searchNews(forYouKeywords, pageToLoad)
+                    repository.searchNewsResult(forYouKeywords, pageToLoad)
                 } else {
-                    repository.getTopHeadlines(categoryAtStart, pageToLoad, countryCode).articles
+                    repository.getTopHeadlines(categoryAtStart, pageToLoad, countryCode)
                 }
+                val newArticles = result.articles
+                _isServingCached.value = _isServingCached.value || result.fromCache
+                if (result.cachedAt != null) _cachedAt.value = result.cachedAt
 
                 if (newArticles.isEmpty()) {
                     isLastPage = true
@@ -189,10 +192,10 @@ class FeedManager(
         searchJob = scope.launch(Dispatchers.IO) {
             delay(400)
             try {
-                val articles = repository.searchNews(query, currentPage)
-                _isServingCached.value = false
-                _cachedAt.value = null
-                _uiState.value = NewsUiState.Success(articles)
+                val result = repository.searchNewsResult(query, currentPage)
+                _isServingCached.value = result.fromCache
+                _cachedAt.value = result.cachedAt
+                _uiState.value = NewsUiState.Success(result.articles)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -243,10 +246,11 @@ class FeedManager(
         _pendingArticleUrl.value = null
     }
 
-    fun clearCache(countryCode: String) {
+    fun clearCache() {
         scope.launch {
             repository.clearCache()
-            fetchNews(countryCode = countryCode)
+            _isServingCached.value = false
+            _cachedAt.value = null
         }
     }
 
@@ -256,10 +260,14 @@ class FeedManager(
         }
     }
 
-    fun setSuccessArticles(articles: List<Article>) {
+    fun setSuccessArticles(
+        articles: List<Article>,
+        fromCache: Boolean = false,
+        cachedAt: Long? = null
+    ) {
         _uiState.value = NewsUiState.Success(articles)
-        _isServingCached.value = false
-        _cachedAt.value = null
+        _isServingCached.value = fromCache
+        _cachedAt.value = cachedAt
     }
 
     fun setLoading() {

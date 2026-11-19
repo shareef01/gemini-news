@@ -319,8 +319,12 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 feedManager.forYouKeywords = keywords
-                val articles = repository.searchNews(keywords, 1)
-                feedManager.setSuccessArticles(articles)
+                val result = repository.searchNewsResult(keywords, 1)
+                feedManager.setSuccessArticles(
+                    articles = result.articles,
+                    fromCache = result.fromCache,
+                    cachedAt = result.cachedAt
+                )
             } catch (e: TimeoutCancellationException) {
                 feedManager.selectCategory("general", countryCode.value)
             } catch (e: CancellationException) {
@@ -370,7 +374,7 @@ class NewsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearCache() {
-        feedManager.clearCache(countryCode.value)
+        feedManager.clearCache()
         viewModelScope.launch {
             aiRepository.clearCache()
         }

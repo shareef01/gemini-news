@@ -134,8 +134,9 @@ internal fun parseLocationsResponse(
 /**
  * Parses Gemini-generated article summaries into typed [ArticleInsight] structures.
  *
- * Validates evidence attribution against actual article text fields to catch
- * model hallucinations or fabricated quotes.
+ * The evidence field only records lexical overlap with source text. It does not
+ * establish that a claim is supported, and this parser is not used by the live
+ * summary or Reader flows.
  */
 internal fun parseArticleInsight(
     responseText: String,
@@ -223,7 +224,7 @@ internal fun parseArticleInsight(
         }
     }
 
-    // Evidence attribution validation
+    // Weak lexical-overlap heuristic; a matching token does not prove a claim.
     val evidenceList = mutableListOf<ArticleEvidence>()
     val title = article.title.lowercase()
     val desc = (article.description ?: "").lowercase()
@@ -247,7 +248,7 @@ internal fun parseArticleInsight(
             ArticleEvidence(
                 quoteOrFact = takeaway,
                 sourceField = sourceField,
-                verifiedInSource = sourceField != "unverified"
+                hasTextOverlap = sourceField != "unverified"
             )
         )
     }

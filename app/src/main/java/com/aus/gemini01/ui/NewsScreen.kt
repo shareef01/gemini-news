@@ -263,7 +263,7 @@ fun NewsListContent(
                         )
                         Spacer(modifier = Modifier.width(Dimens.spaceM))
                         Text(
-                            "Offline — showing cached headlines" +
+                            "Showing saved results" +
                                 (cachedAt?.let { " • ${formatCacheAge(it)}" } ?: ""),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -63,8 +63,8 @@ Cleartext HTTP traffic is disabled across production builds:
 
 ## AI Structured Insights & Evidence Attribution
 
-* Gemini smart summaries are parsed into typed models (`ArticleInsight`, `Takeaway`, `SentimentAnalysis`, `ArticleEvidence`).
-* Evidence claims are rigorously validated against source text (article title, description, content) to prevent hallucinations and detect prompt injection.
+* Summary and Reader screens currently display model-generated text directly. The `parseArticleInsight` utility is not connected to those production flows, and its lexical overlap heuristic is not reliable evidence verification.
+* Treat AI output as unverified. The prompt guard is a best-effort instruction and does not prevent hallucinations or prompt injection.
 * Coroutine cancellation is preserved throughout all AI error classification paths (`CancellationException` is always rethrown).
 
 ## Device smoke (local Pixel)
