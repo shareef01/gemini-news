@@ -350,7 +350,7 @@ fun SettingsScreen(
                             type = "text/plain"
                         }
                         val shareIntent = Intent.createChooser(sendIntent, "Share Gemini News")
-                        context.startActivity(shareIntent)
+                        runCatching { context.startActivity(shareIntent) }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(Dimens.radiusM)

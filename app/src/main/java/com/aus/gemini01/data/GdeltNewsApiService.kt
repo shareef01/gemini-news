@@ -36,9 +36,9 @@ internal interface GdeltNewsApiService {
 }
 
 internal fun GdeltArticle.toDomainArticle(): Article? {
-    val safeUrl = url.trim()
+    val safeUrl = com.aus.gemini01.ui.safeArticleUrl(url) ?: return null
     val safeTitle = title.trim()
-    if (safeTitle.isEmpty() || !(safeUrl.startsWith("https://") || safeUrl.startsWith("http://"))) {
+    if (safeTitle.isEmpty()) {
         return null
     }
 
@@ -71,14 +71,58 @@ internal fun gdeltTopHeadlinesQuery(category: String?, countryCode: String): Str
     return "$categoryTerms sourcecountry:$sourceCountry"
 }
 
-internal fun gdeltSearchQuery(query: String, countryCode: String): String {
-    val terms = query
+private val GDELT_BOOLEAN_KEYWORDS = setOf("or", "and", "not")
+
+private fun sanitizeGdeltClause(raw: String): String {
+    return raw
         .replace(Regex("[^\\p{L}\\p{N}\\s'-]"), " ")
         .trim()
-        .replace(Regex("\\s+"), " ")
-        .take(200)
-        .ifBlank { "news" }
+        .split(Regex("\\s+"))
+        .filter { it.isNotBlank() && it.lowercase(Locale.ROOT) !in GDELT_BOOLEAN_KEYWORDS }
+        .joinToString(" ")
+}
+
+/**
+ * Formats a user or multi-topic search string into a valid GDELT DOC 2.0 query.
+ * Comma-separated topic lists (such as "For You" interests) become parenthesized
+ * boolean OR clauses; single searches use unquoted keyword matching so short
+ * terms like "AI" or multi-word non-adjacent queries return results cleanly.
+ */
+internal fun gdeltSearchQuery(query: String, countryCode: String): String {
     require(countryCode.equals("us", ignoreCase = true)) { "Only US news is enabled in this build." }
     val sourceCountry = "unitedstates"
-    return "\"$terms\" sourcecountry:$sourceCountry"
+
+    val rawClauses = query.take(250).split(",")
+    val cleanedClauses = rawClauses
+        .map(::sanitizeGdeltClause)
+        .filter { it.isNotBlank() }
+        .take(5)
+
+    val expression = when {
+        cleanedClauses.isEmpty() -> "news"
+        cleanedClauses.size == 1 -> cleanedClauses.first().take(200)
+        else -> {
+            val formatted = cleanedClauses.map { clause ->
+                if (' ' in clause && clause.length >= 5) "\"$clause\"" else clause
+            }
+            "(${formatted.joinToString(" OR ")})"
+        }
+    }
+    return "$expression sourcecountry:$sourceCountry"
+}
+
+/** Formats comma-separated AI interest topics into an OR query for NewsAPI / Proxy search. */
+internal fun formatMultiTopicSearchQuery(rawKeywords: String): String {
+    val topics = rawKeywords
+        .split(",")
+        .map { it.replace(Regex("[^\\p{L}\\p{N}\\s'-]"), " ").trim().replace(Regex("\\s+"), " ") }
+        .filter { it.isNotBlank() }
+        .take(5)
+    return when {
+        topics.isEmpty() -> "news"
+        topics.size == 1 -> topics.first()
+        else -> topics.joinToString(" OR ") { topic ->
+            if (' ' in topic) "\"$topic\"" else topic
+        }
+    }
 }

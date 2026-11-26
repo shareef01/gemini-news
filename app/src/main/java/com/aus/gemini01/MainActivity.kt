@@ -25,6 +25,8 @@ import com.aus.gemini01.ui.NotificationHelper
 import com.aus.gemini01.ui.theme.Gemini01Theme
 import com.aus.gemini01.worker.NewsWorker
 import com.aus.gemini01.worker.ReminderWorker
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
@@ -40,13 +42,20 @@ class MainActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.notificationsEnabled.collect { enabled ->
-                    if (enabled) {
-                        scheduleNewsWork()
-                    } else {
-                        cancelNewsWork()
-                    }
+                combine(
+                    viewModel.notificationsEnabled,
+                    viewModel.newsApiFreeTier
+                ) { enabled, dataSaver ->
+                    enabled && !dataSaver
                 }
+                    .distinctUntilChanged()
+                    .collect { shouldSchedule ->
+                        if (shouldSchedule) {
+                            scheduleNewsWork()
+                        } else {
+                            cancelNewsWork()
+                        }
+                    }
             }
         }
 

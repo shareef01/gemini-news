@@ -75,9 +75,9 @@ Gemini News routes external publisher pages through **Android Custom Tabs** (`Ar
 This build currently enables only United States headlines. Earlier schemas keyed cached articles by `(url, category)`; Room v7 adds a country dimension so additional regions can be enabled later without mixing cached feeds.
 
 The cache schema isolates partitions across both category and country:
-- **Entity Composite Key**: `(url, category, country)` in `CachedArticleEntity`.
+- **Entity Composite Key**: `(url, category, country)` in `CachedArticleEntity`, with `feedOrder` preserving exact headline order during offline fallback.
 - **Partitioned Queries**: Room queries filter by both `category` and `country`.
-- **Migration Discipline**: Room version bumped from 6 to 7 with explicit `MIGRATION_6_7`. In SQLite, modifying primary keys requires recreating the table; `MIGRATION_6_7` migrates all cached articles, backfills existing records with `'us'`, and preserves bookmarks, history, and AI results with zero data loss.
+- **Migration Discipline**: Room migrations `MIGRATION_4_5` through `MIGRATION_7_8` add AI caching, `cachedAt`, multi-region `(url, category, country)` isolation, deterministic feed/bookmark ordering (`feedOrder`, `savedAt`), and indexed AI TTL pruning without destructive fallbacks.
 
 ---
 
@@ -86,7 +86,7 @@ The cache schema isolates partitions across both category and country:
 ### 5.1 Untrusted Article Content Delimitation
 Headlines, summaries, and full text from external RSS/API feeds are treated as untrusted data:
 - **Prompt Injection Guard**: Every prompt embeds instructions commanding the model to treat content within `[[DATA]] ... [[/DATA]]` blocks strictly as data and to ignore embedded instructions.
-- **Delimiter Stripping**: Incoming text has delimiter tokens stripped to prevent escaping the data block.
+- **Iterative Delimiter Stripping**: Incoming text iteratively strips `[[DATA]]` and `[[/DATA]]` markers (case-insensitively) until none remain, preventing nested-token reconstruction such as `[[DA[[/DATA]]TA]]`.
 - **Context Bounds**: Input fields are capped at 12,000 characters to prevent context window exhaustion or denial-of-service.
 
 ### 5.2 Structured Insights & Evidence Attribution

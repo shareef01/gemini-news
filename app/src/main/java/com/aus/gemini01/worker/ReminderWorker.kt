@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.core.net.toUri
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.aus.gemini01.GeminiNewsApplication
 import com.aus.gemini01.data.NewsRepository
 import com.aus.gemini01.data.local.AppDatabase
 import com.aus.gemini01.ui.NotificationHelper
@@ -16,8 +17,9 @@ class ReminderWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val database = AppDatabase.getDatabase(applicationContext)
-        val newsRepository = NewsRepository(database.newsDao())
+        val app = applicationContext as? GeminiNewsApplication
+        val newsRepository = app?.newsRepository
+            ?: NewsRepository(AppDatabase.getDatabase(applicationContext).newsDao())
 
         return try {
             val bookmarks = newsRepository.getAllBookmarks().first()

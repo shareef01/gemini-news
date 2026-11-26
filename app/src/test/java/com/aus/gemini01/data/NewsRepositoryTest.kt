@@ -269,4 +269,47 @@ class NewsRepositoryTest {
         // Verify api key was not sent
         assertEquals(null, service.lastApiKey)
     }
+
+    @Test
+    fun `duplicate_article_urls_are_deduplicated_in_headlines_and_search`() = kotlinx.coroutines.runBlocking {
+        val first = Article(title = "First Copy", url = "https://example.com/dup")
+        val second = Article(title = "Second Copy", url = "https://example.com/dup")
+        val distinct = Article(title = "Distinct", url = "https://example.com/unique")
+        val service = FakeNewsApiService(NewsResponse(articles = listOf(first, second, distinct)))
+        val repository = NewsRepository(RecordingNewsDao(), service) { "test-key" }
+
+        val headlineArticles = repository.getTopHeadlines(allowOfflineFallback = false).articles
+        assertEquals(listOf(first, distinct), headlineArticles)
+
+        val searchArticles = repository.searchNews("dup")
+        assertEquals(listOf(first, distinct), searchArticles)
+    }
+
+    @Test
+    fun `searchForYouResult_formats_comma_topics_into_OR_query_for_newsapi`() = kotlinx.coroutines.runBlocking {
+        val service = FakeNewsApiService(NewsResponse(articles = emptyList()))
+        val repository = NewsRepository(RecordingNewsDao(), service) { "test-key" }
+
+        repository.searchForYouResult("Space Exploration, AI, Electric Vehicles")
+        assertEquals("\"Space Exploration\" OR AI OR \"Electric Vehicles\"", service.lastQuery)
+    }
+
+    @Test
+    fun `gdeltSearchQuery_supports_short_terms_and_comma_separated_OR_clauses`() {
+        assertEquals("AI sourcecountry:unitedstates", gdeltSearchQuery("AI", "us"))
+        assertEquals(
+            "(\"Space Exploration\" OR AI OR \"Electric Vehicles\") sourcecountry:unitedstates",
+            gdeltSearchQuery("Space Exploration, AI, Electric Vehicles", "us")
+        )
+        assertEquals("climate policy sourcecountry:unitedstates", gdeltSearchQuery("climate OR policy", "us"))
+    }
+
+    @Test
+    fun `gdeltArticle_upgrades_http_and_rejects_unsafe_urls`() {
+        val upgraded = GdeltArticle(url = "http://example.com/story", title = "Headline").toDomainArticle()
+        assertEquals("https://example.com/story", upgraded?.url)
+
+        val rejected = GdeltArticle(url = "javascript:alert(1)", title = "Bad").toDomainArticle()
+        assertEquals(null, rejected)
+    }
 }

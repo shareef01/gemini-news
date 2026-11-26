@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NewsDao {
-    @Query("SELECT * FROM articles")
+    @Query("SELECT * FROM articles ORDER BY savedAt DESC")
     fun getAllBookmarks(): Flow<List<ArticleEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -16,7 +16,7 @@ interface NewsDao {
     suspend fun deleteBookmark(article: ArticleEntity)
 
     // Caching Methods
-    @Query("SELECT * FROM cached_articles WHERE category = :category AND country = :country")
+    @Query("SELECT * FROM cached_articles WHERE category = :category AND country = :country ORDER BY feedOrder ASC")
     suspend fun getCachedArticles(category: String, country: String = "us"): List<CachedArticleEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

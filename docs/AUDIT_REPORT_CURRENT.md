@@ -42,19 +42,29 @@ The current branch is Room v7. This review fixed the proxy-token gap, restricted
 - No unit tests, lint, instrumentation, or app build were rerun after this follow-up. Gradle dependency graph resolution succeeded; AGP emitted its existing warning that `android.disallowKotlinSourceSets=false` is experimental.
 - Release signing, Play Integrity certificate matching, privacy disclosures, and publisher/source rights remain external gates for distributing the Android app binary; they do not block publishing the source repository on GitHub.
 
+## Audit & remediation follow-up — 2026-11-26
+
+- Deduplicated article URLs across GDELT, NewsAPI/proxy feed & search paths, and the Cloud Function proxy (`proxyPolicy.js`) so duplicate provider URLs cannot trigger `LazyColumn` key collisions.
+- Fixed "For You" and short-keyword GDELT search queries (`gdeltSearchQuery` / `formatMultiTopicSearchQuery`), upgraded GDELT `http://` links to validated `https://`, and surfaced actionable "For You" error states instead of silently switching tabs to `"general"`.
+- Guarded `"smart"` (Smart Themes) and partial first pages in `FeedManager.loadMore` so small theme buckets no longer trigger rogue page-2 fetches.
+- Unified external publisher links on Android Custom Tabs (`ArticleNavigator`), defaulted metadata-only GDELT cards to Custom Tabs (`Open Story`), restored Reader Mode across process death, and replaced hardcoded NewsAPI labels in `ReadingModeScreen`.
+- Narrowed `gdeltCacheMutex` to in-memory reads/writes with a `feedCacheGeneration` barrier so 5s–60s GDELT throttles and HTTP calls never block cache hits or `clearCache()`.
+- Upgraded Room to v8 (`MIGRATION_7_8`) with `feedOrder` on `cached_articles`, `savedAt` on `articles`, and an `(kind, createdAt)` index on `ai_results`; synced `6.json`–`8.json` test assets and extended Robolectric + `MigrationTestHelper` coverage.
+- Added `preferredLanguage` to `AiCacheKeys.themes`, retained loaded feed headlines across multi-turn `ChatManager` conversations, isolated per-feature jobs/generations in `InsightsManager`, lazy-started single-flight jobs in `AiRepository`, guarded `DataStoreAiTelemetry` writes with `runCatching`, and hardened `sanitizeForPrompt` against nested/case-variant `[[DATA]]` delimiters.
+- Shared process-scoped repositories in `GeminiNewsApplication`, gated hourly `NewsWorker` scheduling on `!newsApiFreeTier`, fixed `TtsManager.speak` state reporting, added TTS and Custom Tabs `<queries>` to `AndroidManifest.xml`, extracted testable `functions/proxyPolicy.js` with `node:test` coverage, and aligned GitHub Actions CI on JDK 25 + a Node 22 Cloud Functions job.
+
 ## Validation and limitations
 
-The unit, lint, and instrumented results below are from the earlier baseline. The Android debug build passed after adding the Spark-mode Maps fallback and again after making GDELT the keyless default and clearing development keys from release variants. A raw GDELT request returned valid JSON, then a subsequent request returned HTTP 429; the new Retrofit path was not exercised against the live endpoint. The Firebase function received a Node syntax check but was not deployed.
+The unit, lint, and APK build checks below were executed after the 2026-11-26 remediation pass (`connectedDebugAndroidTest` remains covered by CI / attached hardware).
 
 | Command | Result |
 |---|---|
-| `./gradlew.bat testDebugUnitTest` | PASS — 151 tests |
-| `./gradlew.bat lintDebug` | PASS — reports an AGP update advisory |
-| `./gradlew.bat :app:assembleDebug` | PASS — current Spark mode and keyless GDELT default |
-| `./gradlew.bat connectedDebugAndroidTest` | PASS — 6 tests on API 36 emulator |
-| `node --check functions/index.js` | PASS |
-| `firebase functions:list --project com-aus-gemini01-d91c9` | PASS — no functions deployed |
-| `firebase deploy --only firestore:rules --project com-aus-gemini01-d91c9` | PASS — default-deny rules deployed |
+| `./gradlew.bat testDebugUnitTest` | PASS — 162 tests, 0 failures |
+| `./gradlew.bat compileDebugAndroidTestKotlin` | PASS |
+| `./gradlew.bat lintDebug` | PASS — 0 non-dependency code issues |
+| `./gradlew.bat :app:assembleDebug :app:assembleRelease` | PASS — R8 release APK built |
+| `npm --prefix functions run lint && npm --prefix functions test` | PASS — 3/3 Node tests |
+| `npm --prefix functions audit` | PASS — 0 vulnerabilities |
 | `git diff --check` | PASS — no whitespace errors |
 
 Firebase AI Logic App Check enforcement was verified as active. Under the Spark constraint, billing, Maps rendering, the proxy, and its durable rate limits intentionally remain inactive. The GDELT public API is rate-limited and did not return a successful response in the live check; its availability needs monitoring. Production signing identity and the publisher rights for any source content remain unresolved; see `PRODUCTION_NOTES.md`.

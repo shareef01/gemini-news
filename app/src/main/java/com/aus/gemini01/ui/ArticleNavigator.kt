@@ -1,10 +1,7 @@
 package com.aus.gemini01.ui
 
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.net.toUri
 
@@ -35,7 +32,7 @@ object ArticleNavigator {
             customTabsIntent.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             customTabsIntent.launchUrl(context, uri)
             true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Fallback to standard external browser intent
             try {
                 val browserIntent = Intent(Intent.ACTION_VIEW, uri).apply {
@@ -43,7 +40,7 @@ object ArticleNavigator {
                 }
                 context.startActivity(browserIntent)
                 true
-            } catch (e2: ActivityNotFoundException) {
+            } catch (_: Exception) {
                 false
             }
         }

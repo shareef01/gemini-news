@@ -3,6 +3,7 @@ package com.aus.gemini01.worker
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.aus.gemini01.GeminiNewsApplication
 import com.aus.gemini01.data.NewsRepository
 import com.aus.gemini01.data.SettingsRepository
 import com.aus.gemini01.data.local.AppDatabase
@@ -16,9 +17,11 @@ class NewsWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val database = AppDatabase.getDatabase(applicationContext)
-        val newsRepository = NewsRepository(database.newsDao())
-        val settingsRepository = SettingsRepository(applicationContext)
+        val app = applicationContext as? GeminiNewsApplication
+        val newsRepository = app?.newsRepository
+            ?: NewsRepository(AppDatabase.getDatabase(applicationContext).newsDao())
+        val settingsRepository = app?.settingsRepository
+            ?: SettingsRepository(applicationContext)
 
         return try {
             val countryCode = settingsRepository.countryCode.first()

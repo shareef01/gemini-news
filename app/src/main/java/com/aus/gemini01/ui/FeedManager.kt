@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+private const val PAGE_SIZE = 20
+
 class FeedManager(
     private val repository: NewsRepository,
     private val scope: CoroutineScope,
@@ -58,6 +60,7 @@ class FeedManager(
     private var pageJob: Job? = null
     private var fetchGeneration = 0L
     private var searchGeneration = 0L
+    private var pageGeneration = 0L
     var forYouKeywords: String = ""
 
     fun selectCategory(category: String, countryCode: String) {
@@ -106,7 +109,8 @@ class FeedManager(
                 }
 
                 if (category == "for_you" && forYouKeywords.isNotBlank()) {
-                    val searchResult = repository.searchNewsResult(query = forYouKeywords, page = 1)
+                    val searchResult = repository.searchForYouResult(rawKeywords = forYouKeywords, page = 1)
+                    isLastPage = searchResult.articles.size < PAGE_SIZE
                     _uiState.value = NewsUiState.Success(searchResult.articles)
                     _isServingCached.value = searchResult.fromCache
                     _cachedAt.value = searchResult.cachedAt
@@ -114,6 +118,7 @@ class FeedManager(
                 }
 
                 val result = repository.getTopHeadlines(category, currentPage, countryCode)
+                isLastPage = result.articles.size < PAGE_SIZE
                 _isServingCached.value = result.fromCache
                 _cachedAt.value = result.cachedAt
                 _uiState.value = NewsUiState.Success(result.articles)
@@ -133,18 +138,23 @@ class FeedManager(
         if (_isLoadingMore.value || isLastPage) return
 
         val categoryAtStart = _selectedCategory.value
-        if (categoryAtStart == "bookmarks" || categoryAtStart == "history") return
+        val activeSearch = _searchQuery.value
+        if (activeSearch.isBlank()) {
+            if (categoryAtStart in setOf("bookmarks", "history", "smart")) return
+            if (categoryAtStart == "for_you" && forYouKeywords.isBlank()) return
+        }
 
-        val pageToLoad = currentPage + 1
+        val pageToLoad = nextPageToLoad(currentPage)
+        val generation = ++pageGeneration
         _isLoadingMore.value = true
 
         pageJob?.cancel()
         pageJob = scope.launch(Dispatchers.IO) {
             try {
-                val result = if (_searchQuery.value.isNotBlank()) {
-                    repository.searchNewsResult(_searchQuery.value, pageToLoad)
-                } else if (categoryAtStart == "for_you" && forYouKeywords.isNotBlank()) {
-                    repository.searchNewsResult(forYouKeywords, pageToLoad)
+                val result = if (activeSearch.isNotBlank()) {
+                    repository.searchNewsResult(activeSearch, pageToLoad)
+                } else if (categoryAtStart == "for_you") {
+                    repository.searchForYouResult(forYouKeywords, pageToLoad)
                 } else {
                     repository.getTopHeadlines(categoryAtStart, pageToLoad, countryCode)
                 }
@@ -155,6 +165,9 @@ class FeedManager(
                 if (newArticles.isEmpty()) {
                     isLastPage = true
                 } else {
+                    if (newArticles.size < PAGE_SIZE) {
+                        isLastPage = true
+                    }
                     currentPage = pageToLoad
                     val currentList = (_uiState.value as? NewsUiState.Success)?.articles ?: emptyList()
                     val existingUrls = currentList.map { it.url }.toSet()
@@ -166,7 +179,9 @@ class FeedManager(
             } catch (e: Exception) {
                 errorEvents.emit("Could not load more articles.")
             } finally {
-                _isLoadingMore.value = false
+                if (generation == pageGeneration) {
+                    _isLoadingMore.value = false
+                }
             }
         }
     }
@@ -174,10 +189,12 @@ class FeedManager(
     fun searchNews(query: String, isRefresh: Boolean = false) {
         val generation = ++searchGeneration
         fetchGeneration++
+        pageGeneration++
         _searchQuery.value = query
         searchJob?.cancel()
         fetchJob?.cancel()
         pageJob?.cancel()
+        _isLoadingMore.value = false
 
         if (query.isBlank()) {
             fetchNews(isRefresh = isRefresh)
@@ -193,6 +210,7 @@ class FeedManager(
             delay(400)
             try {
                 val result = repository.searchNewsResult(query, currentPage)
+                isLastPage = result.articles.size < PAGE_SIZE
                 _isServingCached.value = result.fromCache
                 _cachedAt.value = result.cachedAt
                 _uiState.value = NewsUiState.Success(result.articles)
@@ -265,9 +283,16 @@ class FeedManager(
         fromCache: Boolean = false,
         cachedAt: Long? = null
     ) {
+        isLastPage = articles.size < PAGE_SIZE
         _uiState.value = NewsUiState.Success(articles)
         _isServingCached.value = fromCache
         _cachedAt.value = cachedAt
+    }
+
+    fun setError(message: String) {
+        _isServingCached.value = false
+        _cachedAt.value = null
+        _uiState.value = NewsUiState.Error(message)
     }
 
     fun setLoading() {
@@ -275,8 +300,13 @@ class FeedManager(
     }
 
     fun cancelActiveJobs() {
+        fetchGeneration++
+        searchGeneration++
+        pageGeneration++
         fetchJob?.cancel()
         searchJob?.cancel()
         pageJob?.cancel()
+        _isRefreshing.value = false
+        _isLoadingMore.value = false
     }
 }

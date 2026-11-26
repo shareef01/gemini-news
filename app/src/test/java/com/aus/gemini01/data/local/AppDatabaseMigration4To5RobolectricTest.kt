@@ -149,6 +149,60 @@ class AppDatabaseMigration4To5RobolectricTest {
         }
     }
 
+    @Test
+    fun migrate7To8_addsOrderingColumnsAndAiIndex() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val config = SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name("migration-robolectric-news-v8")
+            .callback(object : SupportSQLiteOpenHelper.Callback(7) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    createV4Schema(db)
+                    AppDatabase.MIGRATION_4_5.migrate(db)
+                    AppDatabase.MIGRATION_5_6.migrate(db)
+                    AppDatabase.MIGRATION_6_7.migrate(db)
+                }
+
+                override fun onUpgrade(
+                    db: SupportSQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int
+                ) = Unit
+            })
+            .build()
+
+        val openHelper = FrameworkSQLiteOpenHelperFactory().create(config)
+        openHelper.writableDatabase.use { db ->
+            db.execSQL(
+                """
+                INSERT INTO articles (url, sourceName, author, title, description, urlToImage, publishedAt, content)
+                VALUES ('https://example.com/b8', 'Src', NULL, 'Saved v7', NULL, NULL, '2026-09-01', NULL)
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO cached_articles (url, category, country, sourceName, author, title, description, urlToImage, publishedAt, content, cachedAt)
+                VALUES ('https://example.com/c8', 'general', 'us', 'Src', NULL, 'Cached v7', NULL, NULL, '2026-09-01', NULL, 999)
+                """.trimIndent()
+            )
+
+            AppDatabase.MIGRATION_7_8.migrate(db)
+
+            db.query("SELECT savedAt FROM articles WHERE url = 'https://example.com/b8'").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0L, c.getLong(0))
+            }
+            db.query("SELECT feedOrder FROM cached_articles WHERE url = 'https://example.com/c8'").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0, c.getInt(0))
+            }
+            db.query(
+                "SELECT name FROM sqlite_master WHERE type='index' AND name='index_ai_results_kind_createdAt'"
+            ).use { c ->
+                assertTrue(c.moveToFirst())
+            }
+        }
+    }
+
     private fun createV4Schema(db: SupportSQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS `articles` (" +

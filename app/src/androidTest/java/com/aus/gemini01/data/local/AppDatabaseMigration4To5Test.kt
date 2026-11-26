@@ -92,4 +92,38 @@ class AppDatabaseMigration4To5Test {
             close()
         }
     }
+
+    @Test
+    fun migrate6To8_validatesCountryPartitionAndOrderingColumns() {
+        val dbName = "migration-test-news-v6-to-v8"
+        helper.createDatabase(dbName, 6).apply {
+            execSQL(
+                """
+                INSERT INTO cached_articles (
+                    url, category, sourceName, author, title, description,
+                    urlToImage, publishedAt, content, cachedAt
+                ) VALUES (
+                    'https://example.com/v6', 'technology', 'Src', NULL, 'Tech v6',
+                    NULL, NULL, '2026-09-01T00:00:00Z', NULL, 42
+                )
+                """.trimIndent()
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(
+            dbName,
+            8,
+            true,
+            AppDatabase.MIGRATION_6_7,
+            AppDatabase.MIGRATION_7_8
+        ).apply {
+            query("SELECT country, feedOrder FROM cached_articles WHERE url = 'https://example.com/v6'").use { c ->
+                assert(c.moveToFirst())
+                assert(c.getString(0) == "us")
+                assert(c.getInt(1) == 0)
+            }
+            close()
+        }
+    }
 }

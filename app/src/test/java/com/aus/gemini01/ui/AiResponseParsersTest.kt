@@ -264,15 +264,15 @@ class AiResponseParsersTest {
         assertEquals(1, insight.entities.size)
         assertEquals("Reuters, Tech Giant", insight.entities[0])
 
-        // Evidence verification: first two should be verified against description/content
-        assertTrue(insight.evidence[0].verifiedInSource)
+        // Evidence overlap: first two should overlap description/content
+        assertTrue(insight.evidence[0].hasTextOverlap)
         assertEquals("description", insight.evidence[0].sourceField)
 
-        assertTrue(insight.evidence[1].verifiedInSource)
+        assertTrue(insight.evidence[1].hasTextOverlap)
         assertEquals("content", insight.evidence[1].sourceField)
 
         // Third claim is not in the source text
-        org.junit.Assert.assertFalse(insight.evidence[2].verifiedInSource)
+        org.junit.Assert.assertFalse(insight.evidence[2].hasTextOverlap)
         assertEquals("unverified", insight.evidence[2].sourceField)
     }
 
@@ -304,6 +304,6 @@ class AiResponseParsersTest {
 
         assertEquals(1, insight.takeaways.size)
         assertEquals(com.aus.gemini01.data.ai.SentimentTone.NEGATIVE, insight.sentiment?.tone)
-        assertTrue(insight.evidence[0].verifiedInSource)
+        assertTrue(insight.evidence[0].hasTextOverlap)
     }
 }

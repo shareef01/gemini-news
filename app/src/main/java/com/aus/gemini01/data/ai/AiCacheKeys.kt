@@ -66,13 +66,17 @@ object AiCacheKeys {
             "$url:$fingerprint"
         }, language)
 
-    fun themes(articleUrls: List<String>): String =
-        build("themes", articleUrls.joinToString("|"))
+    fun themes(articleUrls: List<String>, language: String = "English"): String =
+        build("themes", articleUrls.joinToString("|"), language)
 
-    fun themes(articleUrls: List<String>, evidenceFingerprints: List<String>): String =
+    fun themes(
+        articleUrls: List<String>,
+        evidenceFingerprints: List<String>,
+        language: String = "English"
+    ): String =
         build("themes", articleUrls.zip(evidenceFingerprints).joinToString("|") { (url, fingerprint) ->
             "$url:$fingerprint"
-        })
+        }, language)
 
     fun locations(articleUrls: List<String>): String =
         build("locations", articleUrls.joinToString("|"))

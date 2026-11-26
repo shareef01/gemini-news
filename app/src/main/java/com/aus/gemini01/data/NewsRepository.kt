@@ -221,56 +221,77 @@ class NewsRepository(
         page: Int,
         allowStaleMemoryCacheOnRateLimit: Boolean = false
     ): GdeltArticlesResult {
-        gdeltCacheMutex.lock()
-        try {
+        val generationAtStart = feedCacheMutex.withLock { feedCacheGeneration }
+        val cachedSnapshot = gdeltCacheMutex.withLock {
             val now = System.currentTimeMillis()
             val cached = gdeltCache[query]
-            var fromStaleCache = false
-            var staleCachedAt: Long? = null
-            val allArticles = if (cached != null && now - cached.first < GDELT_CACHE_TTL_MS) {
-                cached.second
-            } else {
-                val fetched = try {
-                    GdeltRequestThrottle.execute {
-                        gdeltApiService.articles(query = query, maxRecords = GDELT_RESULT_LIMIT)
-                            .articles
-                            .mapNotNull(GdeltArticle::toDomainArticle)
-                    }
-                } catch (error: HttpException) {
-                    if (
-                        !allowStaleMemoryCacheOnRateLimit ||
-                        error.code() != 429 ||
-                        cached == null ||
-                        cached.second.isEmpty()
-                    ) {
-                        throw error
-                    }
-                    fromStaleCache = true
-                    staleCachedAt = cached.first
-                    cached.second
-                }
-                // A 429 fallback must keep its original timestamp. Refreshing it
-                // here would make old results appear fresh indefinitely.
-                if (!fromStaleCache) {
-                    if (gdeltCache.size >= 32) {
-                        val oldestKey = gdeltCache.minByOrNull { it.value.first }?.key
-                        if (oldestKey != null) gdeltCache.remove(oldestKey)
-                    }
-                    gdeltCache[query] = System.currentTimeMillis() to fetched
-                }
-                fetched
+            if (cached != null && now - cached.first < GDELT_CACHE_TTL_MS) {
+                return paginateGdeltArticles(cached.second, page)
             }
-            val pageArticles = allArticles
-                .drop((page - 1).coerceAtLeast(0) * GDELT_PAGE_SIZE)
-                .take(GDELT_PAGE_SIZE)
-            return GdeltArticlesResult(
-                response = NewsResponse(totalResults = allArticles.size, articles = pageArticles),
-                fromStaleCache = fromStaleCache,
-                cachedAt = staleCachedAt
-            )
-        } finally {
-            gdeltCacheMutex.unlock()
+            cached
         }
+
+        var fromStaleCache = false
+        var staleCachedAt: Long? = null
+        val allArticles = try {
+            GdeltRequestThrottle.execute {
+                gdeltApiService.articles(query = query, maxRecords = GDELT_RESULT_LIMIT)
+                    .articles
+                    .mapNotNull(GdeltArticle::toDomainArticle)
+                    .distinctBy { it.url }
+            }
+        } catch (error: HttpException) {
+            if (
+                !allowStaleMemoryCacheOnRateLimit ||
+                error.code() != 429 ||
+                cachedSnapshot == null ||
+                cachedSnapshot.second.isEmpty()
+            ) {
+                throw error
+            }
+            fromStaleCache = true
+            staleCachedAt = cachedSnapshot.first
+            cachedSnapshot.second
+        }
+
+        // A 429 fallback must keep its original timestamp, and an in-flight
+        // fetch from before clearCache() must not repopulate memory cache.
+        if (!fromStaleCache) {
+            feedCacheMutex.withLock {
+                if (feedCacheGeneration == generationAtStart) {
+                    gdeltCacheMutex.withLock {
+                        if (gdeltCache.size >= 32 && !gdeltCache.containsKey(query)) {
+                            val oldestKey = gdeltCache.minByOrNull { it.value.first }?.key
+                            if (oldestKey != null) gdeltCache.remove(oldestKey)
+                        }
+                        gdeltCache[query] = System.currentTimeMillis() to allArticles
+                    }
+                }
+            }
+        }
+
+        return paginateGdeltArticles(
+            allArticles = allArticles,
+            page = page,
+            fromStaleCache = fromStaleCache,
+            cachedAt = staleCachedAt
+        )
+    }
+
+    private fun paginateGdeltArticles(
+        allArticles: List<Article>,
+        page: Int,
+        fromStaleCache: Boolean = false,
+        cachedAt: Long? = null
+    ): GdeltArticlesResult {
+        val pageArticles = allArticles
+            .drop((page - 1).coerceAtLeast(0) * GDELT_PAGE_SIZE)
+            .take(GDELT_PAGE_SIZE)
+        return GdeltArticlesResult(
+            response = NewsResponse(totalResults = allArticles.size, articles = pageArticles),
+            fromStaleCache = fromStaleCache,
+            cachedAt = cachedAt
+        )
     }
 
     suspend fun getTopHeadlines(
@@ -315,7 +336,7 @@ class NewsRepository(
                 it.title != "[Removed]" &&
                 it.url.isNotBlank() &&
                 it.url != "https://removed.com"
-            }
+            }.distinctBy { it.url }
 
             // Only cache the first page, and never replace a good cache with an
             // empty success payload (NewsAPI can return zero usable articles
@@ -328,11 +349,12 @@ class NewsRepository(
                         newsDao.replaceCachedArticles(
                             category = effectiveCategory,
                             country = countryCode,
-                            articles = articles.map {
-                                it.toCachedEntity(
+                            articles = articles.mapIndexed { index, article ->
+                                article.toCachedEntity(
                                     category = effectiveCategory,
                                     country = countryCode,
-                                    cachedAt = fetchedAt
+                                    cachedAt = fetchedAt,
+                                    feedOrder = index
                                 )
                             },
                             cutoffEpochMs = cutoff
@@ -371,6 +393,15 @@ class NewsRepository(
     suspend fun searchNews(query: String, page: Int = 1): List<Article> =
         searchNewsResult(query, page).articles
 
+    /** Searches across multiple comma-separated interest topics using boolean OR semantics. */
+    suspend fun searchForYouResult(rawKeywords: String, page: Int = 1): FeedResult {
+        val proxyUrl = proxyUrlProvider()
+        val isProxy = proxyUrl.isNotBlank()
+        val isGdelt = !isProxy && selectedNewsProvider.equals("gdelt", ignoreCase = true)
+        val effectiveQuery = if (isGdelt) rawKeywords else formatMultiTopicSearchQuery(rawKeywords)
+        return searchNewsResult(effectiveQuery, page)
+    }
+
     suspend fun searchNewsResult(query: String, page: Int = 1): FeedResult {
         val proxyUrl = proxyUrlProvider()
         val isProxy = proxyUrl.isNotBlank()
@@ -397,7 +428,7 @@ class NewsRepository(
             it.title != "[Removed]" &&
             it.url.isNotBlank() &&
             it.url != "https://removed.com"
-        }
+        }.distinctBy { it.url }
         return FeedResult(
             articles = articles,
             fromCache = gdeltResult?.fromStaleCache == true,
@@ -413,7 +444,7 @@ class NewsRepository(
     }
 
     suspend fun saveBookmark(article: Article) {
-        newsDao.insertBookmark(article.toEntity())
+        newsDao.insertBookmark(article.toEntity(savedAt = System.currentTimeMillis()))
     }
 
     suspend fun deleteBookmark(article: Article) {
