@@ -21,6 +21,10 @@ class AiCacheKeysTest {
             AiCacheKeys.summary("https://x.com/a", "English"),
             AiCacheKeys.summary("https://x.com/a", "French")
         )
+        assertNotEquals(
+            AiCacheKeys.themes(listOf("https://x.com/a"), listOf("fp1"), "English"),
+            AiCacheKeys.themes(listOf("https://x.com/a"), listOf("fp1"), "Spanish")
+        )
     }
 
     @Test

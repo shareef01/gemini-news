@@ -44,10 +44,12 @@ private val Context.aiStore: DataStore<Preferences> by preferencesDataStore(name
  * "most Gemini usage comes from X" is answerable from real data. Counters
  * reset on the first write after a date change; nothing sensitive is stored.
  */
-class DataStoreAiTelemetry(context: Context) : AiTelemetry {
+class DataStoreAiTelemetry(
+    context: Context,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+) : AiTelemetry {
 
     private val store = context.applicationContext.aiStore
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val dateKey = stringPreferencesKey("date")
     private val lastRequestKey = longPreferencesKey("last_request_at")
@@ -63,14 +65,16 @@ class DataStoreAiTelemetry(context: Context) : AiTelemetry {
      */
     private fun increment(key: Preferences.Key<Int>, extra: (MutablePreferences) -> Unit = {}) {
         scope.launch {
-            store.edit { prefs ->
-                val today = LocalDate.now().toString()
-                if (prefs[dateKey] != today) {
-                    prefs.clear()
-                    prefs[dateKey] = today
+            runCatching {
+                store.edit { prefs ->
+                    val today = LocalDate.now().toString()
+                    if (prefs[dateKey] != today) {
+                        prefs.clear()
+                        prefs[dateKey] = today
+                    }
+                    prefs[key] = (prefs[key] ?: 0) + 1
+                    extra(prefs)
                 }
-                prefs[key] = (prefs[key] ?: 0) + 1
-                extra(prefs)
             }
         }
     }

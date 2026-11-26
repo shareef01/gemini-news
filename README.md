@@ -11,7 +11,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Kotlin-2.4.21-purple.svg?style=flat-square&logo=kotlin" alt="Kotlin" />
   <img src="https://img.shields.io/badge/Jetpack_Compose-Material_3-4285F4.svg?style=flat-square&logo=jetpackcompose" alt="Compose" />
-  <img src="https://img.shields.io/badge/AI-Google_Gemini_Vertex_AI-orange.svg?style=flat-square&logo=google" alt="Gemini" />
+  <img src="https://img.shields.io/badge/AI-Google_Gemini_AI_Logic-orange.svg?style=flat-square&logo=google" alt="Gemini" />
   <img src="https://img.shields.io/badge/Architecture-MVVM_Clean_StateFlow-green.svg?style=flat-square" alt="Architecture" />
   <img src="https://img.shields.io/badge/Android_Target-API_37-3DDC84.svg?style=flat-square&logo=android" alt="Android" />
   <img src="https://img.shields.io/badge/Min_SDK-API_31-3DDC84.svg?style=flat-square&logo=android" alt="Min SDK" />
@@ -20,8 +20,8 @@
 </p>
 
 > [!WARNING]
-> **Project Status: In Development (Pre-Release / Developer Preview)**
-> This application is currently under active engineering development and is **not release-ready** for public distribution or Google Play Store publication. See [Production Notes](docs/PRODUCTION_NOTES.md) for remaining production blockers (such as backend proxy deployment, Play Integrity enforcement, Maps API restrictions, and production release signing).
+> **Android app status: In Development (Pre-Release / Developer Preview)**
+> The app binary is not ready for consumer distribution or Google Play publication. This warning is about releasing the Android app; the source repository can be published on GitHub. See [Production Notes](docs/PRODUCTION_NOTES.md) for app release requirements.
 
 ---
 
@@ -29,7 +29,7 @@
 
 **Gemini News** is a next-generation Android news reader that combines real-time global news aggregation with **Google Gemini AI**. Instead of presenting endless walls of unfiltered articles, Gemini News synthesizes, contextualizes, and delivers distraction-free reporting tailored to your reading preferences.
 
-Built with **100% Jetpack Compose**, **Material 3 Adaptive Design**, **Firebase Vertex AI**, and a resilient **Offline-First Room Architecture**, the app delivers desktop-grade fluidity on phones, foldables, and tablets.
+Built with **100% Jetpack Compose**, **Material 3 Adaptive Design**, **Firebase AI Logic**, and a resilient **Offline-First Room Architecture**, the app delivers desktop-grade fluidity on phones, foldables, and tablets.
 
 ---
 
@@ -80,9 +80,9 @@ Built with **100% Jetpack Compose**, **Material 3 Adaptive Design**, **Firebase 
 
 ### 🧠 Gemini AI Intelligence
 - **Gemini Insights (Smart Summaries)**: One-tap analysis generating structured **Key Takeaways**, **Sentiment & Tone** badges, and **Key Entities**.
-- **Distraction-Free AI Reader Mode**: Reformats the NewsAPI title/description/content into clean Markdown with custom font scaling and typography. This does **not** download publisher HTML or bypass paywalls.
+- **Distraction-Free AI Reader Mode**: When excerpt/body fields are available (such as NewsAPI/proxy feeds), reformats them into clean Markdown with custom font scaling and typography; metadata-only GDELT cards open the publisher story directly in Android Custom Tabs.
 - **Global News Trends**: Synthesizes cross-outlet reporting into the top macro-narratives shaping the world right now.
-- **AI News Map**: Extracts geographic locations mentioned in headlines and renders them on an interactive Google Maps globe.
+- **AI News Locations / Map**: Extracts geographic locations mentioned in headlines and displays an interactive list (or Google Maps view when a Maps key is configured).
 - **Conversational News Expert**: Chat directly with Gemini about breaking news, background context, or historical parallels.
 - **Personalized "For You" Feed**: Semantic recommendations derived from your on-device reading history and saved bookmarks.
 - **Weekly News Digest & Personality**: Analyzes your reading habits to deliver creative summaries and personal news archetypes.
@@ -144,7 +144,7 @@ com.aus.gemini01/
 | **Language** | Kotlin 2.4.21 |
 | **UI Framework** | Jetpack Compose (BOM 2026.08.00) & Material 3 |
 | **Adaptive UI** | AndroidX Compose Material3 Adaptive (1.3.0) |
-| **AI / LLM** | Google Gemini (`gemini-3.8-flash`, pinned) via Firebase AI |
+| **AI / LLM** | Google Gemini (`gemini-3.5-flash-lite`, pinned) via Firebase AI Logic |
 | **Networking** | Retrofit 3.0.0, OkHttp (transitive), Kotlinx Serialization |
 | **Database** | Room 2.8.4 (with KSP) |
 | **Preferences** | AndroidX DataStore 1.2.1 |
@@ -165,10 +165,11 @@ com.aus.gemini01/
 
 ### Installation & Configuration
 
-1. **Clone the Repository**:
+1. **Clone the Repository & Enable Pre-Commit Secret Guard**:
    ```bash
    git clone https://github.com/shareef01/gemini-news.git
    cd gemini-news
+   git config core.hooksPath .githooks
    ```
 
 2. **Configure API Keys**:

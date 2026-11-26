@@ -34,11 +34,15 @@ val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY")
     ?: System.getenv("MAPS_API_KEY")
     ?: ""
 
+fun String.toBuildConfigLiteral(): String =
+    "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 // Local release signing (git-ignored keystore, for release testing only).
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
 }
+val configuredStoreFilePath: String? = keystoreProps.getProperty("storeFile")?.takeIf { it.isNotBlank() }
 
 android {
     namespace = "com.aus.gemini01"
@@ -55,17 +59,17 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "NEWS_API_KEY", "\"$newsApiKey\"")
-        buildConfigField("String", "NEWS_PROVIDER", "\"$newsProvider\"")
-        buildConfigField("String", "NEWS_PROXY_BASE_URL", "\"$newsProxyBaseUrl\"")
+        buildConfigField("String", "NEWS_API_KEY", newsApiKey.toBuildConfigLiteral())
+        buildConfigField("String", "NEWS_PROVIDER", newsProvider.toBuildConfigLiteral())
+        buildConfigField("String", "NEWS_PROXY_BASE_URL", newsProxyBaseUrl.toBuildConfigLiteral())
         buildConfigField("boolean", "MAPS_API_KEY_CONFIGURED", mapsApiKey.isNotBlank().toString())
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = mapsApiKey
     }
 
     signingConfigs {
         create("release") {
-            if (keystorePropsFile.exists()) {
-                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+            if (configuredStoreFilePath != null) {
+                storeFile = rootProject.file(configuredStoreFilePath)
                 storePassword = keystoreProps.getProperty("storePassword")
                 keyAlias = keystoreProps.getProperty("keyAlias")
                 keyPassword = keystoreProps.getProperty("keyPassword")
@@ -83,10 +87,8 @@ android {
             buildConfigField("String", "NEWS_PROVIDER", "\"gdelt\"")
             buildConfigField("boolean", "MAPS_API_KEY_CONFIGURED", "false")
             manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = ""
-            // Only attach release signing when a local keystore is configured.
-            // Missing keystore fails loudly at validateSigning if forced; leaving
-            // it unset lets CI prove R8 without fabricating production credentials.
-            if (keystorePropsFile.exists()) {
+            // Only attach release signing when a valid local keystore path is configured.
+            if (configuredStoreFilePath != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
             proguardFiles(

@@ -1,6 +1,5 @@
 package com.aus.gemini01.ui
 
-import android.os.Build
 import android.net.http.SslError
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceRequest
@@ -96,11 +95,15 @@ fun ArticleWebView(
                         javaScriptCanOpenWindowsAutomatically = false
                         domStorageEnabled = false
                         mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            safeBrowsingEnabled = true
-                        }
+                        safeBrowsingEnabled = true
                     }
                     safeArticleUrl(url)?.let { loadUrl(it) }
+                }
+            },
+            update = { webView ->
+                val targetUrl = safeArticleUrl(url)
+                if (targetUrl != null && webView.url != targetUrl) {
+                    webView.loadUrl(targetUrl)
                 }
             },
             modifier = Modifier

@@ -47,20 +47,28 @@ fun AdaptiveNewsScreen(
     }
     val uiState by viewModel.uiState.collectAsState()
     val readerViewContent by viewModel.readerViewContent.collectAsState()
+    val isGeneratingReaderView by viewModel.isGeneratingReaderView.collectAsState()
     val isSpeaking by viewModel.isSpeaking.collectAsState()
     val newsLocations by viewModel.newsLocations.collectAsState()
     val pendingArticleUrl by viewModel.pendingArticleUrl.collectAsState()
     val chatMessages by viewModel.chatMessages.collectAsState()
     val isChatting by viewModel.isChatting.collectAsState()
 
-    var selectedArticleForWeb by rememberSaveable { mutableStateOf<Article?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showChat by rememberSaveable { mutableStateOf(false) }
     var showLocations by rememberSaveable { mutableStateOf(false) }
     var moreActionsExpanded by remember { mutableStateOf(false) }
 
-    // Notification taps may arrive before the feed has loaded. Prefer the full
-    // article from the feed; use the validated external URL if it has aged out.
+    val openPublisherInCustomTab: (String) -> Unit = { rawUrl ->
+        if (!ArticleNavigator.openArticle(context, rawUrl)) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Couldn't open this article.")
+            }
+        }
+    }
+
+    // Notification taps may arrive before the feed has loaded. Open Reader Mode
+    // when rich article text is available, otherwise open the publisher URL in Custom Tabs.
     LaunchedEffect(pendingArticleUrl, uiState) {
         val pending = pendingArticleUrl ?: return@LaunchedEffect
         when (val state = uiState) {
@@ -69,47 +77,45 @@ fun AdaptiveNewsScreen(
                 val article = state.articles.firstOrNull { it.url == pending }
                 viewModel.clearPendingArticleUrl()
                 if (article != null) {
-                    selectedArticleForWeb = article
-                    navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
-                } else if (!ArticleNavigator.openArticle(context, pending)) {
-                    snackbarHostState.showSnackbar("Couldn't open this article.")
+                    viewModel.addToHistory(article)
+                    if (article.hasReaderContent()) {
+                        viewModel.fetchReaderView(article)
+                        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
+                    } else {
+                        openPublisherInCustomTab(article.url)
+                    }
+                } else {
+                    openPublisherInCustomTab(pending)
                 }
             }
             is NewsUiState.Error -> {
                 viewModel.clearPendingArticleUrl()
-                if (!ArticleNavigator.openArticle(context, pending)) {
-                    snackbarHostState.showSnackbar("Couldn't open this article.")
-                }
+                openPublisherInCustomTab(pending)
             }
         }
     }
 
-    // Logic to decide what goes in the detail pane
     val currentDetailArticle = navigator.currentDestination?.contentKey
-    val navigateBackFromDetail: () -> Unit = {
-        if (selectedArticleForWeb != null) {
-            selectedArticleForWeb = null
-        } else {
-            viewModel.clearReaderView()
+
+    // Restore Reader Mode cleanly after process death when navigator kept the detail article.
+    LaunchedEffect(currentDetailArticle) {
+        if (currentDetailArticle != null && readerViewContent == null && !isGeneratingReaderView) {
+            viewModel.fetchReaderView(currentDetailArticle)
         }
+    }
+
+    val navigateBackFromDetail: () -> Unit = {
+        viewModel.clearReaderView()
         coroutineScope.launch { navigator.navigateBack() }
     }
     val openArticleFromAuxiliary: (Article) -> Unit = { article ->
-        showSettings = false
-        showChat = false
-        showLocations = false
-        viewModel.clearNewsLocations()
-        selectedArticleForWeb = article
-        coroutineScope.launch {
-            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
-        }
+        openPublisherInCustomTab(article.url)
     }
     val openReaderFromAuxiliary: (Article) -> Unit = { article ->
         showSettings = false
         showChat = false
         showLocations = false
         viewModel.clearNewsLocations()
-        selectedArticleForWeb = null
         viewModel.fetchReaderView(article)
         coroutineScope.launch {
             navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
@@ -161,8 +167,9 @@ fun AdaptiveNewsScreen(
                 onArticleClick = { url ->
                     val article = (uiState as? NewsUiState.Success)?.articles?.find { it.url == url }
                     if (article != null) {
-                        openArticleFromAuxiliary(article)
+                        viewModel.addToHistory(article)
                     }
+                    openPublisherInCustomTab(url)
                 }
             )
         }
@@ -243,13 +250,9 @@ fun AdaptiveNewsScreen(
                         NewsListContent(
                             viewModel = viewModel,
                             onArticleSelected = { article ->
-                                selectedArticleForWeb = article
-                                coroutineScope.launch {
-                                    navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
-                                }
+                                openPublisherInCustomTab(article.url)
                             },
                             onReadingModeSelected = { article ->
-                                selectedArticleForWeb = null
                                 viewModel.fetchReaderView(article)
                                 coroutineScope.launch {
                                     navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, article)
@@ -263,28 +266,23 @@ fun AdaptiveNewsScreen(
             detailPane = {
                 AnimatedPane {
                     if (currentDetailArticle != null) {
-                        if (readerViewContent != null) {
+                        val content = readerViewContent
+                        if (content != null) {
                             ReadingModeScreen(
                                 article = currentDetailArticle,
-                                result = readerViewContent!!,
+                                result = content,
                                 isSpeaking = isSpeaking,
                                 onBack = navigateBackFromDetail,
-                                onOpenInWeb = { 
-                                    ArticleNavigator.openArticle(context, currentDetailArticle.url)
+                                onOpenInWeb = {
+                                    openPublisherInCustomTab(currentDetailArticle.url)
                                 },
                                 onRetry = {
                                     viewModel.fetchReaderView(currentDetailArticle)
                                 },
                                 onToggleReadAloud = {
-                                    val text = (readerViewContent as? AiResult.Success)?.text
+                                    val text = (content as? AiResult.Success)?.text
                                     if (text != null) viewModel.toggleReadAloud(text)
                                 }
-                            )
-                        } else if (selectedArticleForWeb != null) {
-                            ArticleWebView(
-                                url = selectedArticleForWeb!!.url,
-                                title = selectedArticleForWeb!!.title,
-                                onBack = navigateBackFromDetail
                             )
                         } else {
                             com.aus.gemini01.ui.components.ReaderViewShimmer()

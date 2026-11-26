@@ -1,5 +1,6 @@
 package com.aus.gemini01.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.aus.gemini01.data.Article
@@ -14,10 +15,11 @@ data class ArticleEntity(
     val description: String?,
     val urlToImage: String?,
     val publishedAt: String,
-    val content: String?
+    val content: String?,
+    @ColumnInfo(defaultValue = "0") val savedAt: Long = 0L
 )
 
-fun Article.toEntity() = ArticleEntity(
+fun Article.toEntity(savedAt: Long = 0L) = ArticleEntity(
     url = url,
     sourceName = source.name,
     author = author,
@@ -25,7 +27,8 @@ fun Article.toEntity() = ArticleEntity(
     description = description,
     urlToImage = urlToImage,
     publishedAt = publishedAt,
-    content = content
+    content = content,
+    savedAt = savedAt
 )
 
 fun ArticleEntity.toDomain() = Article(

@@ -553,4 +553,26 @@ class AiRepositoryTest {
         assertEquals(0, telemetry.errors.size)
         assertNull(dao.get("key_cancel"))
     }
+
+    @Test
+    fun `unconfinedScope_synchronousFailure_isRemovedFromInflightMap`() = runBlocking {
+        val dao = FakeAiResultDao()
+        val telemetry = FakeAiTelemetry()
+        val unconfinedScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val repository = repository(dao, telemetry, unconfinedScope)
+
+        try {
+            repository.cachedOrFetch("key_unconfined", AiFeature.SUMMARY) {
+                throw RuntimeException("429 immediate quota failure")
+            }
+            fail("Expected AiRequestException")
+        } catch (_: AiRequestException) {
+        }
+
+        val retryResult = repository.cachedOrFetch("key_unconfined", AiFeature.SUMMARY) {
+            "recovered"
+        }
+        assertEquals("recovered", retryResult)
+        unconfinedScope.cancel()
+    }
 }

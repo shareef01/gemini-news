@@ -4,6 +4,7 @@ import com.aus.gemini01.data.local.AiResultDao
 import com.aus.gemini01.data.local.AiResultEntity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,8 +60,9 @@ class AiRepository(
         }
 
         val generationAtStart = cacheGeneration.get()
+        var createdOwner = false
         val deferred = synchronized(inFlight) {
-            inFlight[cacheKey] ?: scope.async {
+            inFlight[cacheKey] ?: scope.async(start = CoroutineStart.LAZY) {
                 try {
                     // Another caller may have finished and written the cache while
                     // we were waiting to enter the single-flight map — reuse it.
@@ -100,7 +102,13 @@ class AiRepository(
                 } finally {
                     synchronized(inFlight) { inFlight.remove(cacheKey) }
                 }
-            }.also { inFlight[cacheKey] = it }
+            }.also {
+                inFlight[cacheKey] = it
+                createdOwner = true
+            }
+        }
+        if (createdOwner) {
+            deferred.start()
         }
 
         return try {

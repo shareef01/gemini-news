@@ -4,7 +4,6 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -57,64 +56,59 @@ class TtsManager(
 
     private fun requestAudioFocus(): Boolean {
         val manager = audioManager ?: return true
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val playbackAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                .build()
-            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-                .setAudioAttributes(playbackAttributes)
-                .setAcceptsDelayedFocusGain(false)
-                .setOnAudioFocusChangeListener(focusChangeListener)
-                .build()
-            audioFocusRequest = request
-            manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        } else {
-            @Suppress("DEPRECATION")
-            manager.requestAudioFocus(
-                focusChangeListener,
-                AudioManager.STREAM_MUSIC,
-                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
-            ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        }
+        val playbackAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(playbackAttributes)
+            .setAcceptsDelayedFocusGain(false)
+            .setOnAudioFocusChangeListener(focusChangeListener)
+            .build()
+        audioFocusRequest = request
+        return manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     }
 
     private fun abandonAudioFocus() {
         val manager = audioManager ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            audioFocusRequest?.let { manager.abandonAudioFocusRequest(it) }
-            audioFocusRequest = null
-        } else {
-            @Suppress("DEPRECATION")
-            manager.abandonAudioFocus(focusChangeListener)
-        }
+        audioFocusRequest?.let { manager.abandonAudioFocusRequest(it) }
+        audioFocusRequest = null
     }
 
-    fun speak(text: String, languageName: String) {
-        if (!isInitialized || text.isBlank()) return
+    fun speak(text: String, languageName: String): Boolean {
+        val engine = tts ?: return false
+        if (!isInitialized || text.isBlank()) return false
+
+        val spoken = stripMarkdownForSpeech(text)
+        if (spoken.isBlank()) return false
 
         requestAudioFocus()
 
         val locale = getLocaleForLanguage(languageName)
-        tts?.language = locale
-
-        val spoken = stripMarkdownForSpeech(text)
-        if (spoken.isBlank()) {
-            abandonAudioFocus()
-            return
+        val langStatus = engine.setLanguage(locale)
+        if (langStatus == TextToSpeech.LANG_MISSING_DATA || langStatus == TextToSpeech.LANG_NOT_SUPPORTED) {
+            engine.setLanguage(Locale.US)
         }
 
         val maxLen = 3500
-        if (spoken.length <= maxLen) {
-            tts?.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "news_reader_single")
+        val firstResult = if (spoken.length <= maxLen) {
+            engine.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "news_reader_single")
         } else {
             val chunks = chunkText(spoken, maxLen)
+            var result = TextToSpeech.ERROR
             chunks.forEachIndexed { index, chunk ->
                 val mode = if (index == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
                 val utteranceId = if (index == chunks.lastIndex) "news_reader_chunk_${index}_last" else "news_reader_chunk_$index"
-                tts?.speak(chunk, mode, null, utteranceId)
+                val r = engine.speak(chunk, mode, null, utteranceId)
+                if (index == 0) result = r
             }
+            result
         }
+        if (firstResult != TextToSpeech.SUCCESS) {
+            abandonAudioFocus()
+            return false
+        }
+        return true
     }
 
     private fun chunkText(text: String, maxChunkSize: Int): List<String> {

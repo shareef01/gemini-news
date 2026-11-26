@@ -31,7 +31,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -263,7 +262,7 @@ fun NewsListContent(
                         )
                         Spacer(modifier = Modifier.width(Dimens.spaceM))
                         Text(
-                            "Offline — showing cached headlines" +
+                            "Showing saved results" +
                                 (cachedAt?.let { " • ${formatCacheAge(it)}" } ?: ""),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -321,7 +320,7 @@ fun NewsListContent(
                                     },
                                     message = when (selectedCategory) {
                                         "bookmarks" -> "Tap the bookmark icon on any story to save it for offline reading."
-                                        "history" -> "Articles you open in Reader Mode will be saved here."
+                                        "history" -> "Stories you read or open will be saved here."
                                         "for_you" -> "Bookmark or read a few stories so Gemini AI can learn your reading interests."
                                         "smart" -> "Tap the button below to analyze today's news with Gemini."
                                         else -> if (searchQuery.isNotEmpty()) {
@@ -560,7 +559,7 @@ fun NewsList(
     onReadingMode: (Article) -> Unit
 ) {
     val listState = rememberLazyListState()
-    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
 
     LaunchedEffect(listState, articles.size) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
@@ -613,7 +612,7 @@ fun NewsList(
         if (BuildConfig.NEWS_PROVIDER == "gdelt" && BuildConfig.NEWS_PROXY_BASE_URL.isBlank()) {
             item {
                 TextButton(
-                    onClick = { uriHandler.openUri("https://www.gdeltproject.org/") },
+                    onClick = { ArticleNavigator.openArticle(context, "https://www.gdeltproject.org/") },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("News data from the GDELT Project")
@@ -622,6 +621,10 @@ fun NewsList(
         }
     }
 }
+
+/** True when the news provider supplied excerpt or body text suitable for AI Reader Mode. */
+internal fun Article.hasReaderContent(): Boolean =
+    !description.isNullOrBlank() || !content.isNullOrBlank()
 
 @Composable
 fun ArticleCard(
@@ -633,9 +636,10 @@ fun ArticleCard(
     onReadingMode: () -> Unit
 ) {
     val context = LocalContext.current
+    val supportsReaderMode = article.hasReaderContent()
 
     ElevatedCard(
-        onClick = onReadingMode,
+        onClick = if (supportsReaderMode) onReadingMode else onReadMore,
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = 1.5.dp,
@@ -751,19 +755,36 @@ fun ArticleCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        FilledTonalButton(
-                            onClick = onReadingMode,
-                            shape = MaterialTheme.shapes.large,
-                            contentPadding = PaddingValues(horizontal = Dimens.spaceL, vertical = Dimens.spaceS)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                                contentDescription = null,
-                                modifier = Modifier.size(Dimens.iconSizeS),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(Dimens.spaceS))
-                            Text("Read", style = MaterialTheme.typography.labelLarge)
+                        if (supportsReaderMode) {
+                            FilledTonalButton(
+                                onClick = onReadingMode,
+                                shape = MaterialTheme.shapes.large,
+                                contentPadding = PaddingValues(horizontal = Dimens.spaceL, vertical = Dimens.spaceS)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimens.iconSizeS),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(Dimens.spaceS))
+                                Text("Read", style = MaterialTheme.typography.labelLarge)
+                            }
+                        } else {
+                            FilledTonalButton(
+                                onClick = onReadMore,
+                                shape = MaterialTheme.shapes.large,
+                                contentPadding = PaddingValues(horizontal = Dimens.spaceL, vertical = Dimens.spaceS)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Public,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(Dimens.iconSizeS),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(Dimens.spaceS))
+                                Text("Open Story", style = MaterialTheme.typography.labelLarge)
+                            }
                         }
 
                         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.spaceXS)) {
@@ -783,18 +804,20 @@ fun ArticleCard(
                                 Text("Summarize", style = MaterialTheme.typography.labelMedium)
                             }
 
-                            TextButton(
-                                onClick = onReadMore,
-                                contentPadding = PaddingValues(horizontal = Dimens.spaceS)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Public,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(Dimens.iconSizeXS),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.width(Dimens.spaceXXS))
-                                Text("Web", style = MaterialTheme.typography.labelMedium)
+                            if (supportsReaderMode) {
+                                TextButton(
+                                    onClick = onReadMore,
+                                    contentPadding = PaddingValues(horizontal = Dimens.spaceS)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Public,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(Dimens.iconSizeXS),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.width(Dimens.spaceXXS))
+                                    Text("Web", style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         }
                     }
@@ -811,12 +834,14 @@ fun ArticleCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = {
-                            val sendIntent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                putExtra(Intent.EXTRA_TEXT, "${article.title}\n\nRead more: ${article.url}")
-                                type = "text/plain"
+                            runCatching {
+                                val sendIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(Intent.EXTRA_TEXT, "${article.title}\n\nRead more: ${article.url}")
+                                    type = "text/plain"
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Share Article"))
                             }
-                            context.startActivity(Intent.createChooser(sendIntent, "Share Article"))
                         },
                         modifier = Modifier.size(Dimens.touchTarget)
                     ) {

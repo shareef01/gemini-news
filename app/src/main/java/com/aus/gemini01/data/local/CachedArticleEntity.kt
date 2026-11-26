@@ -1,5 +1,6 @@
 package com.aus.gemini01.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import com.aus.gemini01.data.Article
 import com.aus.gemini01.data.Source
@@ -17,13 +18,16 @@ data class CachedArticleEntity(
     val publishedAt: String,
     val content: String?,
     /** Epoch time when this feed row was fetched, independent of publisher time. */
-    val cachedAt: Long
+    val cachedAt: Long,
+    /** Zero-based position from the fetched feed so offline fallback preserves ranking. */
+    @ColumnInfo(defaultValue = "0") val feedOrder: Int = 0
 )
 
 fun Article.toCachedEntity(
     category: String,
     country: String = "us",
-    cachedAt: Long = System.currentTimeMillis()
+    cachedAt: Long = System.currentTimeMillis(),
+    feedOrder: Int = 0
 ) = CachedArticleEntity(
     url = url,
     category = category,
@@ -35,7 +39,8 @@ fun Article.toCachedEntity(
     urlToImage = urlToImage,
     publishedAt = publishedAt,
     content = content,
-    cachedAt = cachedAt
+    cachedAt = cachedAt,
+    feedOrder = feedOrder
 )
 
 fun CachedArticleEntity.toDomain() = Article(

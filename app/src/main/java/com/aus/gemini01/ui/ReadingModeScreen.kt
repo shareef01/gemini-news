@@ -193,7 +193,7 @@ private fun ReadingModeContent(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "AI-formatted from NewsAPI fields",
+                            text = "AI-formatted from feed excerpts",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -310,7 +310,7 @@ private fun ReadingModeContent(
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
                         Text(
-                            text = "AI-formatted from NewsAPI fields • Font: $fontSizeLabel",
+                            text = "AI-formatted from feed excerpts • Font: $fontSizeLabel",
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = Dimens.spaceL, vertical = Dimens.spaceS),
                             color = MaterialTheme.colorScheme.onSurfaceVariant

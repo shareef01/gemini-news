@@ -1,6 +1,5 @@
 package com.aus.gemini01.ui
 
-import com.aus.gemini01.data.NewsRepository
 import com.aus.gemini01.data.SettingsRepository
 import com.aus.gemini01.data.ai.AiDiagnostics
 import com.aus.gemini01.data.ai.AiRepository
@@ -12,8 +11,7 @@ import kotlinx.coroutines.launch
 
 class SettingsManager(
     private val settingsRepository: SettingsRepository,
-    private val newsRepository: NewsRepository,
-    private val aiRepository: AiRepository,
+    aiRepository: AiRepository,
     private val scope: CoroutineScope
 ) {
     val countryCode: StateFlow<String> = settingsRepository.countryCode
@@ -72,15 +70,6 @@ class SettingsManager(
     fun setPreferredLanguage(language: String) {
         scope.launch {
             settingsRepository.setPreferredLanguage(language)
-        }
-    }
-
-    fun clearAllUserData(onCleared: () -> Unit) {
-        scope.launch {
-            newsRepository.clearCache()
-            newsRepository.clearHistory()
-            aiRepository.clearCache()
-            onCleared()
         }
     }
 }

@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         HistoryArticleEntity::class,
         AiResultEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -78,6 +78,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v8: preserves feed rank on cached_articles, bookmark savedAt order, and indexes ai_results TTL lookups. */
+        val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `cached_articles` ADD COLUMN `feedOrder` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `articles` ADD COLUMN `savedAt` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_ai_results_kind_createdAt` ON `ai_results` (`kind`, `createdAt`)")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -88,7 +97,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "news_database"
                 )
-                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .build()
                 INSTANCE = instance
                 instance

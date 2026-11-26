@@ -72,7 +72,7 @@ fun SettingsScreen(
     if (showClearCacheDialog) {
         ConfirmationDialog(
             title = "Clear Cache & AI Data?",
-            text = "This will remove all cached headlines and stored AI summaries. Fresh stories will reload when you browse.",
+            text = "This removes saved headlines and AI summaries. Stories already on screen stay visible; pull to refresh when you want fresh headlines.",
             confirmText = "Clear Cache",
             isDestructive = true,
             onConfirm = {
@@ -350,7 +350,7 @@ fun SettingsScreen(
                             type = "text/plain"
                         }
                         val shareIntent = Intent.createChooser(sendIntent, "Share Gemini News")
-                        context.startActivity(shareIntent)
+                        runCatching { context.startActivity(shareIntent) }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(Dimens.radiusM)

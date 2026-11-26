@@ -47,7 +47,7 @@ The client networking layer (`NewsRepository`, `NewsApiService`, and `GdeltNewsA
 ### 2.1 Cleartext Traffic Elimination
 - `AndroidManifest.xml` explicitly enforces `android:usesCleartextTraffic="false"`.
 - Production builds use `app/src/main/res/xml/network_security_config.xml` specifying `cleartextTrafficPermitted="false"` with system trust anchors.
-- All HTTP URLs for article loading, image loading, and AI feeds are either upgraded to HTTPS or rejected via `safeArticleUrl` and `safeImageUrl`.
+- Article and image URLs are normalized to HTTPS or rejected. Image loads also use a dedicated OkHttp DNS guard that rejects private/local addresses for each resolution, including redirect destinations.
 
 ### 2.2 Local Development Loopback Isolation
 To support local development against mock servers or local proxies, `app/src/debug/res/xml/network_security_config.xml` scopes cleartext traffic strictly to `10.0.2.2` (Android emulator host loopback), `localhost`, and `127.0.0.1` without compromising release builds.
@@ -75,25 +75,22 @@ Gemini News routes external publisher pages through **Android Custom Tabs** (`Ar
 This build currently enables only United States headlines. Earlier schemas keyed cached articles by `(url, category)`; Room v7 adds a country dimension so additional regions can be enabled later without mixing cached feeds.
 
 The cache schema isolates partitions across both category and country:
-- **Entity Composite Key**: `(url, category, country)` in `CachedArticleEntity`.
+- **Entity Composite Key**: `(url, category, country)` in `CachedArticleEntity`, with `feedOrder` preserving exact headline order during offline fallback.
 - **Partitioned Queries**: Room queries filter by both `category` and `country`.
-- **Migration Discipline**: Room version bumped from 6 to 7 with explicit `MIGRATION_6_7`. In SQLite, modifying primary keys requires recreating the table; `MIGRATION_6_7` migrates all cached articles, backfills existing records with `'us'`, and preserves bookmarks, history, and AI results with zero data loss.
+- **Migration Discipline**: Room migrations `MIGRATION_4_5` through `MIGRATION_7_8` add AI caching, `cachedAt`, multi-region `(url, category, country)` isolation, deterministic feed/bookmark ordering (`feedOrder`, `savedAt`), and indexed AI TTL pruning without destructive fallbacks.
 
 ---
 
-## 5. Gemini AI Prompt Injection Defense & Ground Truth
+## 5. Gemini AI Prompt Handling & Limitations
 
 ### 5.1 Untrusted Article Content Delimitation
 Headlines, summaries, and full text from external RSS/API feeds are treated as untrusted data:
 - **Prompt Injection Guard**: Every prompt embeds instructions commanding the model to treat content within `[[DATA]] ... [[/DATA]]` blocks strictly as data and to ignore embedded instructions.
-- **Delimiter Stripping**: Incoming text has delimiter tokens stripped to prevent escaping the data block.
+- **Iterative Delimiter Stripping**: Incoming text iteratively strips `[[DATA]]` and `[[/DATA]]` markers (case-insensitively) until none remain, preventing nested-token reconstruction such as `[[DA[[/DATA]]TA]]`.
 - **Context Bounds**: Input fields are capped at 12,000 characters to prevent context window exhaustion or denial-of-service.
 
 ### 5.2 Structured Insights & Evidence Attribution
-AI-generated article summaries are parsed into typed `ArticleInsight` models:
-- **Deterministic Sentiment**: Parsed into `SentimentTone` (`POSITIVE`, `NEGATIVE`, `NEUTRAL`) and explicit explanation.
-- **Evidence Verification**: Takeaways and claims are verified against the actual `title`, `description`, and `content` fields present in the app to detect and flag hallucinated citations.
-- **Graceful Fallback**: If the model output deviates from the expected structure, the UI renders the formatted markdown safely without crashing.
+Summary and Reader screens currently display model-generated text directly. The `parseArticleInsight` utility is not connected to those production flows, and its lexical overlap heuristic is not reliable evidence verification. Treat AI output as unverified; the prompt guard is a best-effort instruction and does not prevent hallucinations or prompt injection.
 
 ---
 

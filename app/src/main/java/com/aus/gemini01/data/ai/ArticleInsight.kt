@@ -14,8 +14,13 @@ data class SentimentAnalysis(
 data class ArticleEvidence(
     val quoteOrFact: String,
     val sourceField: String,
+    /** True when a long token overlaps the selected source field; this is not factual verification. */
+    val hasTextOverlap: Boolean
+) {
+    @Deprecated("Text overlap does not verify a claim against its source.")
     val verifiedInSource: Boolean
-)
+        get() = hasTextOverlap
+}
 
 data class ArticleInsight(
     val summary: String,

@@ -5,35 +5,23 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, Timestamp } = require("firebase-admin/firestore");
 const { onRequest } = require("firebase-functions/v2/https");
 const { defineInt, defineSecret } = require("firebase-functions/params");
+const {
+  RequestError,
+  readNewsApiRequest,
+  sanitizeSuccess,
+  secondsUntilNextUtcDay,
+  secondsUntilNextUtcMinute,
+} = require("./proxyPolicy");
 
 initializeApp();
 const firestore = getFirestore();
 const NEWS_API_KEY = defineSecret("NEWS_API_KEY");
 const NEWS_API_DAILY_REQUEST_LIMIT = defineInt("NEWS_API_DAILY_REQUEST_LIMIT", { default: 100 });
-const NEWS_API_ORIGIN = "https://newsapi.org";
 const ALLOWED_APP_ID = "1:33904026107:android:80ecbda32c0539eade6b5e";
-const MAX_PAGE_SIZE = 20;
-const MAX_PAGE = 1000;
 const MAX_RESPONSE_BYTES = 1_000_000;
 const INSTALLATION_REQUESTS_PER_MINUTE = 30;
 const INSTALLATION_REQUESTS_PER_DAY = 200;
 const INSTALLATION_COUNTER_TTL_DAYS = 90;
-const CATEGORIES = new Set([
-  "business",
-  "entertainment",
-  "general",
-  "health",
-  "science",
-  "sports",
-  "technology",
-]);
-
-class RequestError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
 
 function setJsonHeaders(res) {
   res.set("Cache-Control", "no-store");
@@ -44,85 +32,6 @@ function setJsonHeaders(res) {
 function fail(res, status, message) {
   setJsonHeaders(res);
   res.status(status).json({ status: "error", code: "proxy_error", message });
-}
-
-function queryString(req, name, { required = false, maxLength = 100, trim = false } = {}) {
-  const value = req.query[name];
-  if (value === undefined) {
-    if (required) throw new RequestError(400, `Missing query parameter: ${name}`);
-    return undefined;
-  }
-  if (typeof value !== "string" || value.length > maxLength || (!trim && value.trim() !== value)) {
-    throw new RequestError(400, `Invalid query parameter: ${name}`);
-  }
-  const normalized = trim ? value.trim() : value;
-  if (required && normalized.length === 0) {
-    throw new RequestError(400, `Missing query parameter: ${name}`);
-  }
-  return normalized;
-}
-
-function queryInteger(req, name, { fallback, maximum }) {
-  const value = queryString(req, name, { maxLength: 5 });
-  if (value === undefined) return fallback;
-  if (!/^[1-9]\d*$/.test(value)) {
-    throw new RequestError(400, `Invalid query parameter: ${name}`);
-  }
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed > maximum) {
-    throw new RequestError(400, `Invalid query parameter: ${name}`);
-  }
-  return parsed;
-}
-
-function rejectUnknownParameters(req, allowed) {
-  for (const name of Object.keys(req.query)) {
-    if (!allowed.has(name)) {
-      throw new RequestError(400, `Unsupported query parameter: ${name}`);
-    }
-  }
-}
-
-function readNewsApiRequest(req) {
-  const page = queryInteger(req, "page", { fallback: 1, maximum: MAX_PAGE });
-  const pageSize = queryInteger(req, "pageSize", {
-    fallback: MAX_PAGE_SIZE,
-    maximum: MAX_PAGE_SIZE,
-  });
-  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-
-  if (req.path === "/v2/top-headlines") {
-    rejectUnknownParameters(req, new Set(["country", "category", "page", "pageSize"]));
-    const country = queryString(req, "country", { maxLength: 2 }) ?? "us";
-    if (country !== "us") throw new RequestError(400, "Unsupported country");
-
-    const category = queryString(req, "category", { maxLength: 20 });
-    if (category !== undefined && !CATEGORIES.has(category)) {
-      throw new RequestError(400, "Unsupported category");
-    }
-    params.set("country", country);
-    if (category !== undefined) params.set("category", category);
-    return { url: `${NEWS_API_ORIGIN}/v2/top-headlines?${params}` };
-  }
-
-  if (req.path === "/v2/everything") {
-    rejectUnknownParameters(req, new Set(["q", "page", "pageSize"]));
-    const query = queryString(req, "q", { required: true, maxLength: 500, trim: true });
-    params.set("q", query);
-    return { url: `${NEWS_API_ORIGIN}/v2/everything?${params}` };
-  }
-
-  throw new RequestError(404, "Unknown endpoint");
-}
-
-function secondsUntilNextUtcMinute(nowMs) {
-  return Math.max(1, Math.ceil(((Math.floor(nowMs / 60_000) + 1) * 60_000 - nowMs) / 1000));
-}
-
-function secondsUntilNextUtcDay(nowMs) {
-  const now = new Date(nowMs);
-  const nextUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-  return Math.max(1, Math.ceil((nextUtcMidnight - nowMs) / 1000));
 }
 
 async function reserveRequestQuota(req) {
@@ -139,7 +48,8 @@ async function reserveRequestQuota(req) {
   const nowMs = Date.now();
   const utcDay = new Date(nowMs).toISOString().slice(0, 10);
   const minuteBucket = Math.floor(nowMs / 60_000);
-  const installationHash = createHmac("sha256", NEWS_API_KEY.value())
+  const hmacKey = process.env.NEWS_PROXY_HMAC_KEY || NEWS_API_KEY.value();
+  const installationHash = createHmac("sha256", hmacKey)
     .update(`${req.app.appId}:${installationId}`)
     .digest("hex");
   const installationRef = firestore.collection("newsProxyRateLimits").doc(installationHash);
@@ -190,41 +100,6 @@ async function reserveRequestQuota(req) {
     });
     return { allowed: true };
   });
-}
-
-function sanitizeArticle(article) {
-  if (!article || typeof article !== "object") return null;
-  const title = typeof article.title === "string" ? article.title : "";
-  const url = typeof article.url === "string" ? article.url : "";
-  if (!title.trim() || title === "[Removed]" || !url.trim() || url === "https://removed.com") {
-    return null;
-  }
-
-  const source = article.source && typeof article.source === "object" ? article.source : {};
-  return {
-    source: {
-      id: typeof source.id === "string" ? source.id : null,
-      name: typeof source.name === "string" ? source.name : "Unknown",
-    },
-    author: typeof article.author === "string" ? article.author : null,
-    title,
-    description: typeof article.description === "string" ? article.description : null,
-    url,
-    urlToImage: typeof article.urlToImage === "string" ? article.urlToImage : null,
-    publishedAt: typeof article.publishedAt === "string" ? article.publishedAt : "",
-    content: typeof article.content === "string" ? article.content : null,
-  };
-}
-
-function sanitizeSuccess(payload) {
-  const sourceArticles = Array.isArray(payload.articles) ? payload.articles : [];
-  const articles = sourceArticles.map(sanitizeArticle).filter(Boolean);
-  const totalResults = Number(payload.totalResults);
-  return {
-    status: "ok",
-    totalResults: Number.isSafeInteger(totalResults) && totalResults >= 0 ? totalResults : articles.length,
-    articles,
-  };
 }
 
 async function readBoundedBody(response, maxBytes) {
@@ -333,6 +208,11 @@ exports.newsProxy = onRequest(
       }
       if (error && error.name === "TimeoutError") {
         fail(res, 504, "News provider timed out");
+        return;
+      }
+      if (error && (error.code === 10 || error.code === "aborted")) {
+        res.set("Retry-After", "2");
+        fail(res, 503, "Rate limit service busy, please retry");
         return;
       }
       console.error("News proxy request failed", error && error.name);
